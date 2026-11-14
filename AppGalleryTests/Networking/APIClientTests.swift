@@ -1,3 +1,4 @@
+import os
 import XCTest
 @testable import AppGallery
 
@@ -79,7 +80,7 @@ final class APIClientTests: XCTestCase {
         }
     }
 
-    func testSendReportsACancelledRequestAsCancellationError() async throws {
+    func testSendMapsACancelledRequestToCancellationError() async throws {
         let client = APIClient(session: StubURLProtocol.makeSession(failingWith: URLError(.cancelled)))
         let request = try makeRequest()
 
@@ -89,5 +90,34 @@ final class APIClientTests: XCTestCase {
         } catch {
             XCTAssertTrue(error is CancellationError, "Got \(error)")
         }
+    }
+
+    // MARK: - Cancellation
+
+    /// The request is really in flight here: the protocol accepts it and never answers.
+    /// Every wait has a timeout, so a broken cancellation fails this test instead of hanging it.
+    func testCancellingTheCallingTaskCancelsTheRequestInFlight() async throws {
+        let started = expectation(description: "URLSession started the request")
+        let stopped = expectation(description: "URLSession withdrew the request")
+        let returned = expectation(description: "send returned")
+        let client = APIClient(session: HangingURLProtocol.makeSession(started: started, stopped: stopped))
+        let request = try makeRequest()
+        let thrownError = OSAllocatedUnfairLock<(any Error)?>(initialState: nil)
+
+        let call = Task {
+            do {
+                let _: Payload = try await client.send(request)
+            } catch {
+                thrownError.withLock { $0 = error }
+            }
+            returned.fulfill()
+        }
+        await fulfillment(of: [started], timeout: 2)
+
+        call.cancel()
+
+        await fulfillment(of: [stopped, returned], timeout: 2)
+        let error = thrownError.withLock { $0 }
+        XCTAssertTrue(error is CancellationError, "Got \(String(describing: error))")
     }
 }
