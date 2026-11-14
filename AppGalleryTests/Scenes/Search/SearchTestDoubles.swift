@@ -1,3 +1,4 @@
+import os
 import XCTest
 @testable import AppGallery
 
@@ -31,18 +32,33 @@ final class CountExpectations {
 
 /// A worker whose calls stay suspended until the test completes them,
 /// so the test decides in which order responses arrive.
+///
+/// Like a request that is already on the wire, a call does not return when its task is cancelled;
+/// it only records the cancellation.
 @MainActor
 final class ControllableSearchWorker: SearchWorkingLogic {
 
     private(set) var terms: [String] = []
     private var continuations: [CheckedContinuation<[AppResult], any Error>] = []
     private let calls = CountExpectations()
+    /// Behind a lock because a cancellation handler may run on any thread.
+    private let cancelled = OSAllocatedUnfairLock<[Int]>(initialState: [])
+
+    /// Indexes of the calls whose task was cancelled while they were running (0 is the first call).
+    var cancelledCalls: [Int] {
+        cancelled.withLock { $0 }
+    }
 
     func fetchApps(matching term: String) async throws -> [AppResult] {
+        let index = terms.count
         terms.append(term)
-        return try await withCheckedThrowingContinuation { continuation in
-            continuations.append(continuation)
-            calls.increment()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                continuations.append(continuation)
+                calls.increment()
+            }
+        } onCancel: { [cancelled] in
+            cancelled.withLock { $0.append(index) }
         }
     }
 
@@ -54,6 +70,34 @@ final class ControllableSearchWorker: SearchWorkingLogic {
     /// Finishes the call with the given index (0 is the first call). Each call must be completed exactly once.
     func complete(call index: Int, with result: Result<[AppResult], any Error>) {
         continuations[index].resume(with: result)
+    }
+}
+
+/// Stands in for `Task.sleep`: every wait stays suspended until the test ends it,
+/// so the test decides when the debounce is over.
+@MainActor
+final class ControllableSleeper {
+
+    private(set) var durations: [Duration] = []
+    private var continuations: [CheckedContinuation<Void, Never>] = []
+    private let calls = CountExpectations()
+
+    func sleep(for duration: Duration) async {
+        durations.append(duration)
+        await withCheckedContinuation { continuation in
+            continuations.append(continuation)
+            calls.increment()
+        }
+    }
+
+    /// Fulfilled once `count` waits have started.
+    func expectCalls(_ count: Int) -> XCTestExpectation {
+        calls.expectation(forCount: count, description: "\(count) debounce wait(s)")
+    }
+
+    /// Ends the wait with the given index (0 is the first wait). Each wait must be ended exactly once.
+    func finish(call index: Int) {
+        continuations[index].resume()
     }
 }
 

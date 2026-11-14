@@ -25,6 +25,8 @@ final class SearchInteractor: SearchBusinessLogic, SearchDataStore {
     private let presenter: any SearchPresentationLogic
     private let worker: any SearchWorkingLogic
     private let debounce: Duration
+    /// How the debounce waits. Injected so that tests control time instead of sleeping.
+    private let sleep: (Duration) async throws -> Void
 
     private(set) var apps: [AppResult] = []
 
@@ -32,16 +34,19 @@ final class SearchInteractor: SearchBusinessLogic, SearchDataStore {
     private var currentQuery: String?
     /// Incremented for every new search. A response is used only if its generation is still the current one.
     private var generation = 0
-    private var searchTask: Task<Void, Never>?
+    /// The running search, if any. Readable so that tests can await a search to its very end.
+    private(set) var searchTask: Task<Void, Never>?
 
     init(
         presenter: any SearchPresentationLogic,
         worker: any SearchWorkingLogic,
-        debounce: Duration = .milliseconds(350)
+        debounce: Duration = .milliseconds(350),
+        sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
         self.presenter = presenter
         self.worker = worker
         self.debounce = debounce
+        self.sleep = sleep
     }
 
     deinit {
@@ -78,11 +83,13 @@ final class SearchInteractor: SearchBusinessLogic, SearchDataStore {
         presenter.presentApps(response: .loading)
 
         let generation = generation
-        searchTask = Task { [weak self, worker] in
+        searchTask = Task { [weak self, worker, sleep] in
             let result: Result<[AppResult], any Error>
             do {
-                // Debounce: a newer query cancels this task while it sleeps, so nothing is sent for this one.
-                try await Task.sleep(for: delay)
+                // Debounce: a newer query cancels this task while it waits, so nothing is sent for this one.
+                if delay > .zero {
+                    try await sleep(delay)
+                }
                 try Task.checkCancellation()
                 result = .success(try await worker.fetchApps(matching: query))
             } catch {

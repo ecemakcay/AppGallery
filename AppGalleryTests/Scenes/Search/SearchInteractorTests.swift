@@ -2,7 +2,10 @@ import XCTest
 @testable import AppGallery
 
 /// Everything here runs on the main actor: the interactor, the doubles and the tests.
-/// Tests wait for events with expectations and never sleep.
+///
+/// Tests never sleep and never guess when asynchronous work is done. They wait in two ways:
+/// for an event that must happen, with an expectation; and for a search that must have no
+/// effect, by waiting for the end of its task: once a task has ended, everything it does has happened.
 @MainActor
 final class SearchInteractorTests: XCTestCase {
 
@@ -50,6 +53,23 @@ final class SearchInteractorTests: XCTestCase {
         // Only whitespace differs, so this is the query that is already displayed.
         sut.fetchApps(request: .init(query: "  spotify "))
 
+        XCTAssertNil(sut.searchTask, "No new search was started")
+        XCTAssertEqual(presenter.responses.map(\.summary), ["loading", "loaded(Spotify, SpotifyKids)"])
+        XCTAssertEqual(worker.terms, ["spotify"])
+    }
+
+    func testAnIdenticalQueryWhileTheRequestIsRunningLeavesItAlone() async throws {
+        let (sut, presenter, worker) = makeSUT()
+        sut.fetchApps(request: .init(query: "spotify"))
+        let search = try XCTUnwrap(sut.searchTask)
+        await wait(for: worker.expectCalls(1))
+
+        sut.fetchApps(request: .init(query: " spotify"))
+
+        XCTAssertEqual(sut.searchTask, search, "The running search was not replaced")
+        XCTAssertEqual(worker.cancelledCalls, [])
+        worker.complete(call: 0, with: .success(spotify))
+        await waitForEnd(of: search)
         XCTAssertEqual(presenter.responses.map(\.summary), ["loading", "loaded(Spotify, SpotifyKids)"])
         XCTAssertEqual(worker.terms, ["spotify"])
     }
@@ -84,11 +104,11 @@ final class SearchInteractorTests: XCTestCase {
 
     // MARK: - Changing the query
 
-    func testRapidQueryChangesSendOnlyTheLastQuery() async {
+    func testQueriesReplacedBeforeTheirSearchStartsAreNeverSent() async {
         let (sut, presenter, worker) = makeSUT()
 
-        // No suspension between these calls, as when the user types quickly:
-        // each call cancels the previous task before its debounce is over.
+        // No suspension between these calls: each one cancels the previous task before it has run.
+        // The debounce itself is covered in SearchInteractorDebounceTests.
         sut.fetchApps(request: .init(query: "sp"))
         sut.fetchApps(request: .init(query: "spo"))
         sut.fetchApps(request: .init(query: "spot"))
@@ -100,9 +120,30 @@ final class SearchInteractorTests: XCTestCase {
         XCTAssertEqual(presenter.responses.map(\.summary), ["loading", "loading", "loading", "loaded(Spotify, SpotifyKids)"])
     }
 
-    func testAResponseForAnOlderQueryNeverReplacesNewerResults() async {
+    func testAChangedQueryCancelsTheRunningRequest() async throws {
         let (sut, presenter, worker) = makeSUT()
         sut.fetchApps(request: .init(query: "spotify"))
+        let oldSearch = try XCTUnwrap(sut.searchTask)
+        await wait(for: worker.expectCalls(1))
+        XCTAssertEqual(worker.cancelledCalls, [])
+
+        sut.fetchApps(request: .init(query: "youtube"))
+
+        // Cancellation is delivered synchronously, so it is visible right away.
+        XCTAssertEqual(worker.cancelledCalls, [0])
+
+        await wait(for: worker.expectCalls(2))
+        worker.complete(call: 0, with: .failure(CancellationError()))
+        worker.complete(call: 1, with: .success(youtube))
+        await waitForEnd(of: oldSearch)
+        await wait(for: presenter.expectResponses(3))
+        XCTAssertEqual(worker.cancelledCalls, [0], "The new request is not cancelled")
+    }
+
+    func testAResponseForAnOlderQueryNeverReplacesNewerResults() async throws {
+        let (sut, presenter, worker) = makeSUT()
+        sut.fetchApps(request: .init(query: "spotify"))
+        let staleSearch = try XCTUnwrap(sut.searchTask)
         await wait(for: worker.expectCalls(1))
         sut.fetchApps(request: .init(query: "youtube"))
         await wait(for: worker.expectCalls(2))
@@ -112,23 +153,24 @@ final class SearchInteractorTests: XCTestCase {
         await wait(for: presenter.expectResponses(3))
         // The old request ignored its cancellation and answers after the newer one.
         worker.complete(call: 0, with: .success(spotify))
-        // The stale task was resumed above and the main actor runs its jobs in order,
-        // so once this test continues, the stale response has been handled.
-        await Task.yield()
+        await waitForEnd(of: staleSearch)
 
         XCTAssertEqual(presenter.responses.map(\.summary), ["loading", "loading", "loaded(YouTube)"])
         XCTAssertEqual(sut.apps, youtube)
     }
 
-    func testClearingTheQueryReturnsToIdleAndIgnoresTheLateResponse() async {
+    func testClearingTheQueryReturnsToIdleAndIgnoresTheLateResponse() async throws {
         let (sut, presenter, worker) = makeSUT()
         sut.fetchApps(request: .init(query: "spotify"))
+        let clearedSearch = try XCTUnwrap(sut.searchTask)
         await wait(for: worker.expectCalls(1))
 
         sut.fetchApps(request: .init(query: ""))
-        worker.complete(call: 0, with: .success(spotify))
-        await Task.yield()
 
+        XCTAssertEqual(worker.cancelledCalls, [0])
+        XCTAssertNil(sut.searchTask)
+        worker.complete(call: 0, with: .success(spotify))
+        await waitForEnd(of: clearedSearch)
         XCTAssertEqual(presenter.responses.map(\.summary), ["loading", "idle"])
         XCTAssertEqual(sut.apps, [])
     }
@@ -147,13 +189,14 @@ final class SearchInteractorTests: XCTestCase {
         XCTAssertEqual(sut.apps, [])
     }
 
-    func testACancelledSearchPresentsNothing() async {
+    func testACancelledSearchPresentsNothing() async throws {
         let (sut, presenter, worker) = makeSUT()
 
         sut.fetchApps(request: .init(query: "spotify"))
+        let search = try XCTUnwrap(sut.searchTask)
         await wait(for: worker.expectCalls(1))
         worker.complete(call: 0, with: .failure(CancellationError()))
-        await Task.yield()
+        await waitForEnd(of: search)
 
         XCTAssertEqual(presenter.responses.map(\.summary), ["loading"])
     }
@@ -183,5 +226,26 @@ final class SearchInteractorTests: XCTestCase {
 
         XCTAssertEqual(presenter.responses.map(\.summary), [])
         XCTAssertEqual(worker.terms, [])
+    }
+
+    // MARK: - Lifetime
+
+    func testReleasingTheInteractorCancelsTheRunningRequest() async throws {
+        let presenter = SearchPresenterSpy()
+        let worker = ControllableSearchWorker()
+        var sut: SearchInteractor? = SearchInteractor(presenter: presenter, worker: worker, debounce: .zero)
+        sut?.fetchApps(request: .init(query: "spotify"))
+        let search = try XCTUnwrap(sut?.searchTask)
+        await wait(for: worker.expectCalls(1))
+        weak var weakSUT: SearchInteractor?
+        weakSUT = sut
+
+        sut = nil
+
+        XCTAssertNil(weakSUT, "The running task must not keep the interactor alive")
+        XCTAssertEqual(worker.cancelledCalls, [0])
+        worker.complete(call: 0, with: .failure(CancellationError()))
+        await waitForEnd(of: search)
+        XCTAssertEqual(presenter.responses.map(\.summary), ["loading"])
     }
 }

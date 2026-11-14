@@ -4,13 +4,15 @@ import XCTest
 @MainActor
 final class SearchConfiguratorTests: XCTestCase {
 
-    func testLoadingTheViewAsksTheInteractorForTheInitialState() {
+    /// The hint travels ViewController -> Interactor -> Presenter -> ViewController,
+    /// so finding it on screen proves that the whole cycle is wired.
+    func testLoadingTheViewShowsTheIdleHintWithoutSearching() {
         let worker = ControllableSearchWorker()
         let viewController = SearchConfigurator.makeScene(worker: worker)
 
         viewController.loadViewIfNeeded()
 
-        XCTAssertNotNil(viewController.interactor)
+        XCTAssertTrue(viewController.view.showsLabel(withText: "Search for an application to see its screenshots."))
         XCTAssertEqual(worker.terms, [], "The initial empty query must not be sent")
     }
 
@@ -28,5 +30,17 @@ final class SearchConfiguratorTests: XCTestCase {
 
         XCTAssertNil(weakViewController)
         XCTAssertNil(weakInteractor)
+    }
+}
+
+private extension UIView {
+
+    /// Whether this view or one of its visible descendants is a label with exactly this text.
+    func showsLabel(withText text: String) -> Bool {
+        guard !isHidden else { return false }
+        if let label = self as? UILabel, label.text == text {
+            return true
+        }
+        return subviews.contains { $0.showsLabel(withText: text) }
     }
 }
