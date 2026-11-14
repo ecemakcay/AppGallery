@@ -11,8 +11,12 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     ) {
         guard let windowScene = scene as? UIWindowScene else { return }
 
+        // Composition root: the app's long-lived dependencies are created here and injected.
+        let worker = SearchWorker(apiClient: APIClient())
+        let searchViewController = SearchConfigurator.makeScene(worker: worker)
+
         let window = UIWindow(windowScene: windowScene)
-        window.rootViewController = UINavigationController(rootViewController: SearchViewController())
+        window.rootViewController = UINavigationController(rootViewController: searchViewController)
         window.makeKeyAndVisible()
         self.window = window
     }
