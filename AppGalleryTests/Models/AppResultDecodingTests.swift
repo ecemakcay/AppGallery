@@ -7,6 +7,13 @@ final class AppResultDecodingTests: XCTestCase {
         try JSONDecoder().decode(AppResult.self, from: Data(json.utf8))
     }
 
+    private func screenshots(_ urlStrings: [String]) throws -> [String] {
+        let json = try JSONEncoder().encode(["screenshotUrls": urlStrings])
+        return try JSONDecoder().decode(AppResult.self, from: json).screenshotURLs.map(\.absoluteString)
+    }
+
+    // MARK: - Fields
+
     func testDecodesTheFieldsTheAppUses() throws {
         let app = try decode("""
         {
@@ -17,28 +24,35 @@ final class AppResultDecodingTests: XCTestCase {
         }
         """)
 
-        XCTAssertEqual(app.id, 324684580)
         XCTAssertEqual(app.name, "Spotify: Music and Podcasts")
         XCTAssertEqual(app.developer, "Spotify")
         XCTAssertEqual(app.screenshotURLs.map(\.absoluteString), ["https://example.com/1.png", "https://example.com/2.png"])
     }
 
-    func testMissingOptionalFieldsDoNotFailDecoding() throws {
-        let app = try decode(#"{"trackId": 1}"#)
+    func testAResultWithNoFieldsStillDecodes() throws {
+        let app = try decode("{}")
 
-        XCTAssertEqual(app, AppResult(id: 1, name: nil, developer: nil, screenshotURLs: []))
+        XCTAssertEqual(app, AppResult(name: nil, developer: nil, screenshotURLs: []))
     }
 
-    func testAMalformedScreenshotURLIsSkipped() throws {
-        let app = try decode(#"{"trackId": 1, "screenshotUrls": ["", "https://example.com/2.png"]}"#)
+    func testASparseResultDoesNotCostTheOtherResults() throws {
+        let json = """
+        {"results": [
+            {"trackName": "First", "screenshotUrls": ["https://example.com/1.png"]},
+            {},
+            {"trackName": "Third", "artistName": null, "screenshotUrls": null}
+        ]}
+        """
 
-        XCTAssertEqual(app.screenshotURLs.map(\.absoluteString), ["https://example.com/2.png"])
+        let response = try JSONDecoder().decode(SearchResponse.self, from: Data(json.utf8))
+
+        XCTAssertEqual(response.results.map(\.name), ["First", nil, "Third"])
+        XCTAssertEqual(response.results.map(\.screenshotURLs.count), [1, 0, 0])
     }
 
     func testOtherScreenshotArraysAreIgnored() throws {
         let app = try decode("""
         {
-            "trackId": 1,
             "screenshotUrls": ["https://example.com/phone.png"],
             "ipadScreenshotUrls": ["https://example.com/pad.png"],
             "appletvScreenshotUrls": ["https://example.com/tv.png"]
@@ -46,5 +60,27 @@ final class AppResultDecodingTests: XCTestCase {
         """)
 
         XCTAssertEqual(app.screenshotURLs.map(\.absoluteString), ["https://example.com/phone.png"])
+    }
+
+    // MARK: - Screenshot URLs
+
+    func testOnlyAbsoluteWebAddressesAreKeptInTheirOriginalOrder() throws {
+        let kept = try screenshots([
+            "https://example.com/1.png",
+            "",
+            "images/relative.png",
+            "/absolute/path.png",
+            "file:///tmp/local.png",
+            "ftp://example.com/remote.png",
+            "https://",
+            "http://example.com/2.png",
+            "HTTPS://example.com/3.png"
+        ])
+
+        XCTAssertEqual(kept, [
+            "https://example.com/1.png",
+            "http://example.com/2.png",
+            "HTTPS://example.com/3.png"
+        ])
     }
 }

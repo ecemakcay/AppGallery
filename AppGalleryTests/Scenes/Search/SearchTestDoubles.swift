@@ -91,7 +91,7 @@ extension Search.FetchApps.Response {
         switch self {
         case .idle: return "idle"
         case .loading: return "loading"
-        case .loaded(let apps): return "loaded\(apps.map(\.id))"
+        case .loaded(let apps): return "loaded(\(apps.map { $0.name ?? "-" }.joined(separator: ", ")))"
         case .failed(let error): return "failed(\(error))"
         }
     }
@@ -99,12 +99,12 @@ extension Search.FetchApps.Response {
 
 extension AppResult {
 
-    static func stub(id: Int, name: String? = "App", developer: String? = "Developer", screenshots: Int = 2) -> AppResult {
+    /// `name` is also used in the screenshot URLs, so keep it to a single word.
+    static func stub(_ name: String, developer: String? = "Developer", screenshots: Int = 2) -> AppResult {
         AppResult(
-            id: id,
             name: name,
             developer: developer,
-            screenshotURLs: (0..<screenshots).compactMap { URL(string: "https://example.com/\(id)/\($0).png") }
+            screenshotURLs: (0..<screenshots).compactMap { URL(string: "https://example.com/\(name)/\($0).png") }
         )
     }
 }

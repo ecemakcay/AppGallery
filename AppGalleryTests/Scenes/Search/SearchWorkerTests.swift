@@ -21,7 +21,6 @@ final class SearchWorkerTests: XCTestCase {
 
         let apps = try await worker.fetchApps(matching: "spotify")
 
-        XCTAssertEqual(apps.map(\.id), [324684580, 544007664])
         XCTAssertEqual(apps.map(\.name), ["Spotify: Music and Podcasts", "YouTube"])
         XCTAssertEqual(apps.map(\.developer), ["Spotify", "Google"])
         XCTAssertEqual(apps.map(\.screenshotURLs.count), [8, 5])

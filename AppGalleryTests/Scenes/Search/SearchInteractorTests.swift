@@ -6,8 +6,8 @@ import XCTest
 @MainActor
 final class SearchInteractorTests: XCTestCase {
 
-    private let spotify = [AppResult.stub(id: 1), AppResult.stub(id: 2)]
-    private let youtube = [AppResult.stub(id: 3)]
+    private let spotify = [AppResult.stub("Spotify"), AppResult.stub("SpotifyKids")]
+    private let youtube = [AppResult.stub("YouTube")]
 
     private func makeSUT() -> (sut: SearchInteractor, presenter: SearchPresenterSpy, worker: ControllableSearchWorker) {
         let presenter = SearchPresenterSpy()
@@ -50,7 +50,7 @@ final class SearchInteractorTests: XCTestCase {
         // Only whitespace differs, so this is the query that is already displayed.
         sut.fetchApps(request: .init(query: "  spotify "))
 
-        XCTAssertEqual(presenter.responses.map(\.summary), ["loading", "loaded[1, 2]"])
+        XCTAssertEqual(presenter.responses.map(\.summary), ["loading", "loaded(Spotify, SpotifyKids)"])
         XCTAssertEqual(worker.terms, ["spotify"])
     }
 
@@ -78,7 +78,7 @@ final class SearchInteractorTests: XCTestCase {
         await wait(for: presenter.expectResponses(2))
 
         XCTAssertEqual(worker.terms, ["spotify"], "The query is trimmed before it is sent")
-        XCTAssertEqual(presenter.responses.map(\.summary), ["loading", "loaded[1, 2]"])
+        XCTAssertEqual(presenter.responses.map(\.summary), ["loading", "loaded(Spotify, SpotifyKids)"])
         XCTAssertEqual(sut.apps, spotify)
     }
 
@@ -97,7 +97,7 @@ final class SearchInteractorTests: XCTestCase {
         await wait(for: presenter.expectResponses(4))
 
         XCTAssertEqual(worker.terms, ["spot"])
-        XCTAssertEqual(presenter.responses.map(\.summary), ["loading", "loading", "loading", "loaded[1, 2]"])
+        XCTAssertEqual(presenter.responses.map(\.summary), ["loading", "loading", "loading", "loaded(Spotify, SpotifyKids)"])
     }
 
     func testAResponseForAnOlderQueryNeverReplacesNewerResults() async {
@@ -116,7 +116,7 @@ final class SearchInteractorTests: XCTestCase {
         // so once this test continues, the stale response has been handled.
         await Task.yield()
 
-        XCTAssertEqual(presenter.responses.map(\.summary), ["loading", "loading", "loaded[3]"])
+        XCTAssertEqual(presenter.responses.map(\.summary), ["loading", "loading", "loaded(YouTube)"])
         XCTAssertEqual(sut.apps, youtube)
     }
 
@@ -173,7 +173,7 @@ final class SearchInteractorTests: XCTestCase {
         await wait(for: presenter.expectResponses(4))
 
         XCTAssertEqual(worker.terms, ["spotify", "spotify"])
-        XCTAssertEqual(presenter.responses.map(\.summary), ["loading", "failed(offline)", "loading", "loaded[1, 2]"])
+        XCTAssertEqual(presenter.responses.map(\.summary), ["loading", "failed(offline)", "loading", "loaded(Spotify, SpotifyKids)"])
     }
 
     func testRetryBeforeAnyQueryDoesNothing() {

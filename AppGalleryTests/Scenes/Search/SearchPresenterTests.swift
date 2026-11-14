@@ -32,8 +32,8 @@ final class SearchPresenterTests: XCTestCase {
     // MARK: - Results
 
     func testResultsBecomeOneSectionPerAppInTheSameOrder() {
-        let first = AppResult.stub(id: 1, name: "Spotify", developer: "Spotify AB", screenshots: 3)
-        let second = AppResult.stub(id: 2, name: "YouTube", developer: "Google", screenshots: 1)
+        let first = AppResult.stub("Spotify", developer: "Spotify AB", screenshots: 3)
+        let second = AppResult.stub("YouTube", developer: "Google", screenshots: 1)
 
         let viewModel = present(.loaded([first, second]))
 
@@ -54,7 +54,7 @@ final class SearchPresenterTests: XCTestCase {
     }
 
     func testAnAppWithoutScreenshotsKeepsItsSection() {
-        let viewModel = present(.loaded([.stub(id: 1, screenshots: 0)]))
+        let viewModel = present(.loaded([.stub("Spotify", screenshots: 0)]))
 
         guard case .results(let sections) = viewModel else {
             return XCTFail("Expected results, got \(String(describing: viewModel))")
@@ -64,7 +64,7 @@ final class SearchPresenterTests: XCTestCase {
     }
 
     func testMissingNameAndDeveloperGetFallbackTexts() {
-        let viewModel = present(.loaded([.stub(id: 1, name: nil, developer: nil)]))
+        let viewModel = present(.loaded([AppResult(name: nil, developer: nil, screenshotURLs: [])]))
 
         guard case .results(let sections) = viewModel else {
             return XCTFail("Expected results, got \(String(describing: viewModel))")
