@@ -5,35 +5,49 @@ import UIKit
 final class AppSectionHeaderView: UICollectionReusableView {
 
     static let reuseIdentifier = "AppSectionHeaderView"
-    /// Fixed, because every label is a single line that truncates.
-    static let height: CGFloat = 60
+
+    /// Every label is a single line, so the height follows from the fonts and grows with Dynamic Type.
+    static var preferredHeight: CGFloat {
+        let labelHeights = Font.title.lineHeight + Font.detail.lineHeight
+        return (Layout.topInset + labelHeights + Layout.labelSpacing + Layout.bottomInset).rounded(.up)
+    }
 
     private enum Layout {
         static let horizontalInset: CGFloat = 16
         static let topInset: CGFloat = 12
+        static let bottomInset: CGFloat = 8
         static let labelSpacing: CGFloat = 2
-        static let titleToCountSpacing: CGFloat = 8
+        static let subtitleToCountSpacing: CGFloat = 8
+    }
+
+    /// Read on every use, because the preferred fonts change with the user's text size.
+    private enum Font {
+        static var title: UIFont { .preferredFont(forTextStyle: .headline) }
+        static var detail: UIFont { .preferredFont(forTextStyle: .footnote) }
     }
 
     private let titleLabel: UILabel = {
         let label = UILabel()
-        label.font = .systemFont(ofSize: 17, weight: .semibold)
+        label.font = Font.title
+        label.adjustsFontForContentSizeCategory = true
         label.textColor = .label
         return label
     }()
 
     private let subtitleLabel: UILabel = {
         let label = UILabel()
-        label.font = .systemFont(ofSize: 13)
+        label.font = Font.detail
+        label.adjustsFontForContentSizeCategory = true
         label.textColor = .secondaryLabel
         return label
     }()
 
     private let countLabel: UILabel = {
         let label = UILabel()
-        label.font = .systemFont(ofSize: 13)
+        label.font = Font.detail
+        label.adjustsFontForContentSizeCategory = true
         label.textColor = .secondaryLabel
-        // A long title truncates; the count keeps its full width.
+        // A long developer name truncates; the count keeps its full width.
         label.setContentHuggingPriority(.required, for: .horizontal)
         label.setContentCompressionResistancePriority(.required, for: .horizontal)
         return label
@@ -64,18 +78,19 @@ final class AppSectionHeaderView: UICollectionReusableView {
     }
 
     private func setupConstraints() {
+        // The name gets a full line of its own, so it stays readable at the largest text sizes.
         titleLabel.snp.makeConstraints { make in
             make.top.equalToSuperview().inset(Layout.topInset)
-            make.leading.equalToSuperview().inset(Layout.horizontalInset)
-        }
-        countLabel.snp.makeConstraints { make in
-            make.firstBaseline.equalTo(titleLabel)
-            make.leading.greaterThanOrEqualTo(titleLabel.snp.trailing).offset(Layout.titleToCountSpacing)
-            make.trailing.equalToSuperview().inset(Layout.horizontalInset)
+            make.leading.trailing.equalToSuperview().inset(Layout.horizontalInset)
         }
         subtitleLabel.snp.makeConstraints { make in
             make.top.equalTo(titleLabel.snp.bottom).offset(Layout.labelSpacing)
-            make.leading.trailing.equalToSuperview().inset(Layout.horizontalInset)
+            make.leading.equalToSuperview().inset(Layout.horizontalInset)
+        }
+        countLabel.snp.makeConstraints { make in
+            make.firstBaseline.equalTo(subtitleLabel)
+            make.leading.greaterThanOrEqualTo(subtitleLabel.snp.trailing).offset(Layout.subtitleToCountSpacing)
+            make.trailing.equalToSuperview().inset(Layout.horizontalInset)
         }
     }
 }

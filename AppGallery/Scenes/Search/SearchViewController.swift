@@ -193,6 +193,6 @@ extension SearchViewController: UICollectionViewDelegateFlowLayout {
         layout collectionViewLayout: UICollectionViewLayout,
         referenceSizeForHeaderInSection section: Int
     ) -> CGSize {
-        CGSize(width: collectionView.bounds.width, height: AppSectionHeaderView.height)
+        CGSize(width: collectionView.bounds.width, height: AppSectionHeaderView.preferredHeight)
     }
 }
