@@ -1,0 +1,44 @@
+{
+  "resultCount": 2,
+  "results": [
+    {
+      "trackId": 324684580,
+      "trackName": "Spotify: Music and Podcasts",
+      "artistName": "Spotify",
+      "kind": "software",
+      "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/e9/1f/74/e91f74f7-5d7a-8b48-94ce-ede900d61bff/AppIcon-0-0-1x_U007epad-0-1-0-0-85-220.png/100x100bb.jpg",
+      "screenshotUrls": [
+        "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/b8/f5/52/b8f552b9-ad4e-39df-b2ee-42c6a4d774fd/IOS_-_5.5_-_S01_-_EN_-_GB.png/392x696bb.png",
+        "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/60/e3/a5/60e3a536-b86c-ea31-6c92-a939fbca00a3/IOS_-_5.5_-_S02_-_EN_-_GB.png/392x696bb.png",
+        "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/f2/9b/32/f29b3231-6f3a-6354-2993-4d68460ba84f/IOS_-_5.5_-_S03_-__U005bEnglish__U0028GB_U0029_U005d.png/392x696bb.png",
+        "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/f0/59/9f/f0599ff8-5d43-e0e7-0fa4-df98f52136dd/IOS_-_5.5_-_S04_-__U005bEnglish__U0028GB_U0029_U005d.png/392x696bb.png",
+        "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/81/16/1c/81161c34-c9ab-c019-cc1f-36a46d48e951/IOS_-_5.5_-_S05_-_EN_-_GB.png/392x696bb.png",
+        "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/3b/04/eb/3b04eb10-020c-d9ed-ef86-5e7f5adb34f6/IOS_-_5.5_-_S06_-__U005bEnglish__U0028GB_U0029_U005d.png/392x696bb.png",
+        "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/13/7c/f1/137cf14a-b541-99b2-ca1d-1b205c725b24/IOS_-_5.5_-_S07_-__U005bEnglish__U0028GB_U0029_U005d.png/392x696bb.png",
+        "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/41/cc/80/41cc809e-9d51-3626-212c-f7e3bef85760/IOS_-_5.5_-_S08_-__U005bEnglish__U0028GB_U0029_U005d.png/392x696bb.png"
+      ],
+      "ipadScreenshotUrls": [
+        "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/26/8f/9b/268f9b17-cbc1-17d5-d3c5-07740ad4b2ad/IOS_-_Ipad_12.9__-_S01_-_EN_-_GB.png/552x414bb.png"
+      ],
+      "appletvScreenshotUrls": []
+    },
+    {
+      "trackId": 544007664,
+      "trackName": "YouTube",
+      "artistName": "Google",
+      "kind": "software",
+      "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/84/80/65/84806526-8b53-6e37-8e01-8369c879d30a/logo_youtube_2024_q4_color-0-0-1x_U007emarketing-0-0-0-7-0-0-0-85-220.png/100x100bb.jpg",
+      "screenshotUrls": [
+        "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/74/f9/7c/74f97c4c-a362-89d8-914d-d9bcf0eacc54/cdfcf0fc-0f88-4237-9e9d-a1afb08724e3_iOS-5.5-in_1.jpg/392x696bb.jpg",
+        "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/6c/63/9a/6c639ae5-917f-4b8f-7f8d-6790c4ca4f1a/209c47e2-15a0-44a2-a1b7-ab82b74bd2d8_iOS-5.5-in_2.jpg/392x696bb.jpg",
+        "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/43/32/ed/4332edbd-9ea1-8511-7542-f3e43fe92f3e/f3b103d9-206a-43be-8cf5-c9e907471b04_iOS-5.5-in_3.jpg/392x696bb.jpg",
+        "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/ed/33/09/ed33099c-b231-d116-5645-9d28c850613d/b5a5d11f-5974-4ebd-89a5-f3107a309616_iOS-5.5-in_4.jpg/392x696bb.jpg",
+        "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/dc/fd/1d/dcfd1d54-bdf6-5b5c-56c7-4e9cf8735563/3e7991f1-3174-48fe-bdd6-463f5113d1a1_iOS-5.5-in_5.jpg/392x696bb.jpg"
+      ],
+      "ipadScreenshotUrls": [
+        "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/33/5e/8f/335e8fb8-c08c-b714-0bf6-466919aed1e1/836dadfa-6bb1-4342-a93a-bdd7158a6dec_2048x2732bb__U00282_U0029.png/576x768bb.png"
+      ],
+      "appletvScreenshotUrls": []
+    }
+  ]
+}
