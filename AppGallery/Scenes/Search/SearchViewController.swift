@@ -11,6 +11,8 @@ protocol SearchDisplayLogic: AnyObject {
 final class SearchViewController: UIViewController {
 
     var interactor: (any SearchBusinessLogic)?
+    /// Read-only access to the screenshots. Scheduling them is the interactor's decision.
+    var images: (any ImageProviding)?
 
     private enum Layout {
         static let columns: CGFloat = 2
@@ -40,6 +42,9 @@ final class SearchViewController: UIViewController {
 
     private let stateView = SearchStateView()
 
+    /// Listens for finished downloads. Readable so that tests can wait for it to end.
+    private(set) var imageUpdatesTask: Task<Void, Never>?
+
     // MARK: - Lifecycle
 
     override func viewDidLoad() {
@@ -49,9 +54,14 @@ final class SearchViewController: UIViewController {
         configureSearchController()
         configureCollectionView()
         configureActions()
+        observeImageUpdates()
 
         // An empty query makes the interactor present the idle state.
         interactor?.fetchApps(request: Search.FetchApps.Request(query: ""))
+    }
+
+    deinit {
+        imageUpdatesTask?.cancel()
     }
 
     // MARK: - Setup
@@ -101,6 +111,42 @@ final class SearchViewController: UIViewController {
     private func configureActions() {
         stateView.onRetry = { [weak self] in
             self?.interactor?.retryLastQuery()
+        }
+    }
+
+    // MARK: - Images
+
+    /// Listens for finished downloads for as long as this view controller lives.
+    ///
+    /// `self` is only referred to weakly inside the loop. A strong reference would keep the view
+    /// controller alive for as long as the stream lasts, and `deinit` would never cancel the task.
+    private func observeImageUpdates() {
+        guard let updates = images?.updates() else { return }
+        imageUpdatesTask = Task { [weak self] in
+            for await url in updates {
+                self?.refreshCells(showing: url)
+            }
+        }
+    }
+
+    /// Updates the visible cells that show `url` right now. Cells are found by the URL they
+    /// represent, never by an index path remembered from before the download.
+    private func refreshCells(showing url: URL) {
+        for case let cell as ScreenshotCell in collectionView.visibleCells where cell.representedURL == url {
+            configure(cell, with: url)
+        }
+    }
+
+    private func configure(_ cell: ScreenshotCell, with url: URL) {
+        if let image = images?.image(for: url) {
+            cell.configure(url: url, state: .image(image))
+        } else if images?.hasFailed(url) == true {
+            cell.configure(url: url, state: .failed)
+        } else {
+            // Does nothing while the download is queued or running. It matters when the cache
+            // has dropped an image that was downloaded earlier: this queues it again.
+            images?.request(url, priority: .normal)
+            cell.configure(url: url, state: .loading)
         }
     }
 }
@@ -154,7 +200,14 @@ extension SearchViewController: UICollectionViewDataSource {
         _ collectionView: UICollectionView,
         cellForItemAt indexPath: IndexPath
     ) -> UICollectionViewCell {
-        collectionView.dequeueReusableCell(withReuseIdentifier: ScreenshotCell.reuseIdentifier, for: indexPath)
+        let cell = collectionView.dequeueReusableCell(
+            withReuseIdentifier: ScreenshotCell.reuseIdentifier,
+            for: indexPath
+        )
+        if let screenshotCell = cell as? ScreenshotCell {
+            configure(screenshotCell, with: sections[indexPath.section].screenshotURLs[indexPath.item])
+        }
+        return cell
     }
 
     func collectionView(
@@ -177,6 +230,14 @@ extension SearchViewController: UICollectionViewDataSource {
 // MARK: - UICollectionViewDelegateFlowLayout
 
 extension SearchViewController: UICollectionViewDelegateFlowLayout {
+
+    func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+        let url = sections[indexPath.section].screenshotURLs[indexPath.item]
+        guard let images, images.hasFailed(url) else { return }
+        // Tapping a failed screenshot retries it, ahead of the downloads that are still waiting.
+        images.request(url, priority: .high)
+        refreshCells(showing: url)
+    }
 
     func collectionView(
         _ collectionView: UICollectionView,

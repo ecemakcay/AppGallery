@@ -48,9 +48,17 @@ final class ControllableImageFetcher: ImageFetching {
         starts.expectation(forCount: count, description: "\(count) image download(s) started")
     }
 
-    /// Lets the call with the given index return. Each call must be finished exactly once.
+    /// Lets the call with the given index return. Finishing a call twice does nothing the second time.
     func finish(call index: Int, with result: Result<UIImage, any Error> = .success(UIImage())) {
         continuations.removeValue(forKey: index)?.resume(with: result)
+    }
+
+    /// Lets every call that is still suspended return, so that no task outlives its test.
+    /// Meant for teardown: it also runs when a test fails halfway.
+    func finishRemainingCalls() {
+        for index in continuations.keys.sorted() {
+            finish(call: index, with: .failure(CancellationError()))
+        }
     }
 }
 
@@ -79,6 +87,61 @@ final class ImageUpdateRecorder {
     /// Fulfilled once `count` updates have arrived.
     func expectUpdates(_ count: Int) -> XCTestExpectation {
         updates.expectation(forCount: count, description: "\(count) image update(s)")
+    }
+}
+
+/// Stands in for the download manager on the view side: the test decides which images exist,
+/// which have failed, and when the view controller hears about a finished download.
+@MainActor
+final class ImageProvidingStub: ImageProviding {
+
+    struct Request: Hashable {
+        let url: URL
+        let priority: ImagePriority
+    }
+
+    var images: [URL: UIImage] = [:]
+    var failedURLs: Set<URL> = []
+    private(set) var requests: [Request] = []
+    /// Fulfilled when the subscriber's stream ends, whoever ends it.
+    let subscriptionEnded = XCTestExpectation(description: "The subscription ended")
+
+    private var continuation: AsyncStream<URL>.Continuation?
+
+    func image(for url: URL) -> UIImage? {
+        images[url]
+    }
+
+    func hasFailed(_ url: URL) -> Bool {
+        failedURLs.contains(url)
+    }
+
+    /// Like the real manager, a high-priority request clears the failure: the image is loading again.
+    func request(_ url: URL, priority: ImagePriority) {
+        requests.append(Request(url: url, priority: priority))
+        if priority == .high {
+            failedURLs.remove(url)
+        }
+    }
+
+    func updates() -> AsyncStream<URL> {
+        let (stream, continuation) = AsyncStream.makeStream(of: URL.self)
+        continuation.onTermination = { [subscriptionEnded] _ in
+            subscriptionEnded.fulfill()
+        }
+        self.continuation = continuation
+        return stream
+    }
+
+    /// Tells the subscriber that the download of `url` has ended.
+    func send(_ url: URL) {
+        continuation?.yield(url)
+    }
+
+    /// Ends the stream. The subscriber first handles everything sent so far and then its task ends,
+    /// so waiting for that task is a guarantee that every update has been handled.
+    func finishUpdates() {
+        continuation?.finish()
     }
 }
 

@@ -18,6 +18,8 @@ final class ImageDownloadManagerTests: XCTestCase {
         maxConcurrentDownloads: Int = 3
     ) -> (sut: ImageDownloadManager, fetcher: ControllableImageFetcher, recorder: ImageUpdateRecorder) {
         let fetcher = ControllableImageFetcher()
+        // Runs even when a test fails halfway, so no suspended download outlives its test.
+        addTeardownBlock { await fetcher.finishRemainingCalls() }
         let sut = ImageDownloadManager(fetcher: fetcher, maxConcurrentDownloads: maxConcurrentDownloads)
         return (sut, fetcher, ImageUpdateRecorder(observing: sut))
     }

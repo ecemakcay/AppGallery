@@ -17,6 +17,7 @@ enum SearchConfigurator {
 
         presenter.viewController = viewController
         viewController.interactor = interactor
+        viewController.images = images
         return viewController
     }
 }
