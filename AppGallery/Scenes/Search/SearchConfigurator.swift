@@ -7,10 +7,13 @@ import UIKit
 @MainActor
 enum SearchConfigurator {
 
-    static func makeScene(worker: any SearchWorkingLogic) -> SearchViewController {
+    static func makeScene(
+        worker: any SearchWorkingLogic,
+        images: any ImageProviding & ImageDownloading
+    ) -> SearchViewController {
         let viewController = SearchViewController()
         let presenter = SearchPresenter()
-        let interactor = SearchInteractor(presenter: presenter, worker: worker)
+        let interactor = SearchInteractor(presenter: presenter, worker: worker, imageDownloader: images)
 
         presenter.viewController = viewController
         viewController.interactor = interactor

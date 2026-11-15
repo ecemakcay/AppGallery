@@ -13,6 +13,7 @@ final class SearchInteractorDebounceTests: XCTestCase {
         let sut = SearchInteractor(
             presenter: SearchPresenterSpy(),
             worker: worker,
+            imageDownloader: ImageDownloadingSpy(),
             sleep: { await sleeper.sleep(for: $0) }
         )
         return (sut, worker, sleeper)

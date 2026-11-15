@@ -4,11 +4,16 @@ import XCTest
 @MainActor
 final class SearchConfiguratorTests: XCTestCase {
 
+    private func makeScene(worker: ControllableSearchWorker) -> SearchViewController {
+        let images = ImageDownloadManager(fetcher: ControllableImageFetcher())
+        return SearchConfigurator.makeScene(worker: worker, images: images)
+    }
+
     /// The hint travels ViewController -> Interactor -> Presenter -> ViewController,
     /// so finding it on screen proves that the whole cycle is wired.
     func testLoadingTheViewShowsTheIdleHintWithoutSearching() {
         let worker = ControllableSearchWorker()
-        let viewController = SearchConfigurator.makeScene(worker: worker)
+        let viewController = makeScene(worker: worker)
 
         viewController.loadViewIfNeeded()
 
@@ -22,7 +27,7 @@ final class SearchConfiguratorTests: XCTestCase {
         weak var weakInteractor: AnyObject?
 
         autoreleasepool {
-            let viewController = SearchConfigurator.makeScene(worker: ControllableSearchWorker())
+            let viewController = makeScene(worker: ControllableSearchWorker())
             viewController.loadViewIfNeeded()
             weakViewController = viewController
             weakInteractor = viewController.interactor

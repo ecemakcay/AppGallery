@@ -24,6 +24,7 @@ final class SearchInteractor: SearchBusinessLogic, SearchDataStore {
 
     private let presenter: any SearchPresentationLogic
     private let worker: any SearchWorkingLogic
+    private let imageDownloader: any ImageDownloading
     private let debounce: Duration
     /// How the debounce waits. Injected so that tests control time instead of sleeping.
     private let sleep: (Duration) async throws -> Void
@@ -40,11 +41,13 @@ final class SearchInteractor: SearchBusinessLogic, SearchDataStore {
     init(
         presenter: any SearchPresentationLogic,
         worker: any SearchWorkingLogic,
+        imageDownloader: any ImageDownloading,
         debounce: Duration = .milliseconds(350),
         sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
         self.presenter = presenter
         self.worker = worker
+        self.imageDownloader = imageDownloader
         self.debounce = debounce
         self.sleep = sleep
     }
@@ -74,6 +77,8 @@ final class SearchInteractor: SearchBusinessLogic, SearchDataStore {
         searchTask?.cancel()
         searchTask = nil
         apps = []
+        // The screenshots of the previous results are no longer wanted.
+        imageDownloader.cancelAll()
 
         guard query.count >= Self.minimumQueryLength else {
             presenter.presentApps(response: .idle)
@@ -108,6 +113,9 @@ final class SearchInteractor: SearchBusinessLogic, SearchDataStore {
         switch result {
         case .success(let apps):
             self.apps = apps
+            // The case asks for every screenshot to be downloaded, so all of them are queued now,
+            // whether or not their cells are visible. The manager keeps at most 3 in flight.
+            imageDownloader.enqueue(apps.flatMap(\.screenshotURLs))
             presenter.presentApps(response: .loaded(apps))
         case .failure(let error) where error is CancellationError:
             break

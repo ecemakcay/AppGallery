@@ -12,11 +12,19 @@ final class SearchInteractorTests: XCTestCase {
     private let spotify = [AppResult.stub("Spotify"), AppResult.stub("SpotifyKids")]
     private let youtube = [AppResult.stub("YouTube")]
 
-    private func makeSUT() -> (sut: SearchInteractor, presenter: SearchPresenterSpy, worker: ControllableSearchWorker) {
+    private typealias SUT = (
+        sut: SearchInteractor,
+        presenter: SearchPresenterSpy,
+        worker: ControllableSearchWorker,
+        downloader: ImageDownloadingSpy
+    )
+
+    private func makeSUT() -> SUT {
         let presenter = SearchPresenterSpy()
         let worker = ControllableSearchWorker()
-        let sut = SearchInteractor(presenter: presenter, worker: worker, debounce: .zero)
-        return (sut, presenter, worker)
+        let downloader = ImageDownloadingSpy()
+        let sut = SearchInteractor(presenter: presenter, worker: worker, imageDownloader: downloader, debounce: .zero)
+        return (sut, presenter, worker, downloader)
     }
 
     private func wait(for expectation: XCTestExpectation) async {
@@ -26,7 +34,7 @@ final class SearchInteractorTests: XCTestCase {
     // MARK: - Queries that are not sent
 
     func testTheFirstEmptyQueryPresentsIdleWithoutSearching() {
-        let (sut, presenter, worker) = makeSUT()
+        let (sut, presenter, worker, _) = makeSUT()
 
         sut.fetchApps(request: .init(query: ""))
 
@@ -35,7 +43,7 @@ final class SearchInteractorTests: XCTestCase {
     }
 
     func testAQueryShorterThanTwoCharactersPresentsIdleWithoutSearching() {
-        let (sut, presenter, worker) = makeSUT()
+        let (sut, presenter, worker, _) = makeSUT()
 
         sut.fetchApps(request: .init(query: " a "))
 
@@ -44,7 +52,7 @@ final class SearchInteractorTests: XCTestCase {
     }
 
     func testAnIdenticalQuerySendsNoSecondRequest() async {
-        let (sut, presenter, worker) = makeSUT()
+        let (sut, presenter, worker, _) = makeSUT()
         sut.fetchApps(request: .init(query: "spotify"))
         await wait(for: worker.expectCalls(1))
         worker.complete(call: 0, with: .success(spotify))
@@ -59,7 +67,7 @@ final class SearchInteractorTests: XCTestCase {
     }
 
     func testAnIdenticalQueryWhileTheRequestIsRunningLeavesItAlone() async throws {
-        let (sut, presenter, worker) = makeSUT()
+        let (sut, presenter, worker, _) = makeSUT()
         sut.fetchApps(request: .init(query: "spotify"))
         let search = try XCTUnwrap(sut.searchTask)
         await wait(for: worker.expectCalls(1))
@@ -77,7 +85,7 @@ final class SearchInteractorTests: XCTestCase {
     // MARK: - Successful search
 
     func testANewQueryPresentsLoadingAtOnce() async {
-        let (sut, presenter, worker) = makeSUT()
+        let (sut, presenter, worker, _) = makeSUT()
 
         sut.fetchApps(request: .init(query: "spotify"))
 
@@ -90,7 +98,7 @@ final class SearchInteractorTests: XCTestCase {
     }
 
     func testASuccessfulSearchPresentsAndStoresTheApps() async {
-        let (sut, presenter, worker) = makeSUT()
+        let (sut, presenter, worker, _) = makeSUT()
 
         sut.fetchApps(request: .init(query: "  spotify "))
         await wait(for: worker.expectCalls(1))
@@ -105,7 +113,7 @@ final class SearchInteractorTests: XCTestCase {
     // MARK: - Changing the query
 
     func testQueriesReplacedBeforeTheirSearchStartsAreNeverSent() async {
-        let (sut, presenter, worker) = makeSUT()
+        let (sut, presenter, worker, _) = makeSUT()
 
         // No suspension between these calls: each one cancels the previous task before it has run.
         // The debounce itself is covered in SearchInteractorDebounceTests.
@@ -121,7 +129,7 @@ final class SearchInteractorTests: XCTestCase {
     }
 
     func testAChangedQueryCancelsTheRunningRequest() async throws {
-        let (sut, presenter, worker) = makeSUT()
+        let (sut, presenter, worker, _) = makeSUT()
         sut.fetchApps(request: .init(query: "spotify"))
         let oldSearch = try XCTUnwrap(sut.searchTask)
         await wait(for: worker.expectCalls(1))
@@ -141,7 +149,7 @@ final class SearchInteractorTests: XCTestCase {
     }
 
     func testAResponseForAnOlderQueryNeverReplacesNewerResults() async throws {
-        let (sut, presenter, worker) = makeSUT()
+        let (sut, presenter, worker, downloader) = makeSUT()
         sut.fetchApps(request: .init(query: "spotify"))
         let staleSearch = try XCTUnwrap(sut.searchTask)
         await wait(for: worker.expectCalls(1))
@@ -157,10 +165,15 @@ final class SearchInteractorTests: XCTestCase {
 
         XCTAssertEqual(presenter.responses.map(\.summary), ["loading", "loading", "loaded(YouTube)"])
         XCTAssertEqual(sut.apps, youtube)
+        XCTAssertEqual(
+            downloader.calls,
+            [.cancelAll, .cancelAll, .enqueue(youtube.flatMap(\.screenshotURLs))],
+            "The stale response queues nothing"
+        )
     }
 
     func testClearingTheQueryReturnsToIdleAndIgnoresTheLateResponse() async throws {
-        let (sut, presenter, worker) = makeSUT()
+        let (sut, presenter, worker, _) = makeSUT()
         sut.fetchApps(request: .init(query: "spotify"))
         let clearedSearch = try XCTUnwrap(sut.searchTask)
         await wait(for: worker.expectCalls(1))
@@ -178,7 +191,7 @@ final class SearchInteractorTests: XCTestCase {
     // MARK: - Failure
 
     func testAFailedSearchPresentsTheError() async {
-        let (sut, presenter, worker) = makeSUT()
+        let (sut, presenter, worker, _) = makeSUT()
 
         sut.fetchApps(request: .init(query: "spotify"))
         await wait(for: worker.expectCalls(1))
@@ -190,7 +203,7 @@ final class SearchInteractorTests: XCTestCase {
     }
 
     func testACancelledSearchPresentsNothing() async throws {
-        let (sut, presenter, worker) = makeSUT()
+        let (sut, presenter, worker, _) = makeSUT()
 
         sut.fetchApps(request: .init(query: "spotify"))
         let search = try XCTUnwrap(sut.searchTask)
@@ -204,7 +217,7 @@ final class SearchInteractorTests: XCTestCase {
     // MARK: - Retry
 
     func testRetrySendsTheLastQueryAgain() async {
-        let (sut, presenter, worker) = makeSUT()
+        let (sut, presenter, worker, _) = makeSUT()
         sut.fetchApps(request: .init(query: "spotify"))
         await wait(for: worker.expectCalls(1))
         worker.complete(call: 0, with: .failure(NetworkError.offline))
@@ -220,7 +233,7 @@ final class SearchInteractorTests: XCTestCase {
     }
 
     func testRetryBeforeAnyQueryDoesNothing() {
-        let (sut, presenter, worker) = makeSUT()
+        let (sut, presenter, worker, _) = makeSUT()
 
         sut.retryLastQuery()
 
@@ -228,12 +241,76 @@ final class SearchInteractorTests: XCTestCase {
         XCTAssertEqual(worker.terms, [])
     }
 
+    // MARK: - Screenshot downloads
+
+    func testASuccessfulSearchQueuesEveryScreenshotInOrder() async {
+        let (sut, presenter, worker, downloader) = makeSUT()
+
+        sut.fetchApps(request: .init(query: "spotify"))
+        await wait(for: worker.expectCalls(1))
+        worker.complete(call: 0, with: .success(spotify))
+        await wait(for: presenter.expectResponses(2))
+
+        XCTAssertEqual(downloader.calls, [.cancelAll, .enqueue(spotify.flatMap(\.screenshotURLs))])
+    }
+
+    func testAChangedQueryCancelsTheDownloadsAtOnce() async {
+        let (sut, presenter, worker, downloader) = makeSUT()
+        sut.fetchApps(request: .init(query: "spotify"))
+        await wait(for: worker.expectCalls(1))
+        worker.complete(call: 0, with: .success(spotify))
+        await wait(for: presenter.expectResponses(2))
+
+        sut.fetchApps(request: .init(query: "youtube"))
+
+        // Asserted before anything is awaited: the old screenshots are dropped synchronously.
+        XCTAssertEqual(
+            downloader.calls,
+            [.cancelAll, .enqueue(spotify.flatMap(\.screenshotURLs)), .cancelAll]
+        )
+        await wait(for: worker.expectCalls(2))
+        worker.complete(call: 1, with: .success(youtube))
+        await wait(for: presenter.expectResponses(4))
+        XCTAssertEqual(downloader.calls.last, .enqueue(youtube.flatMap(\.screenshotURLs)))
+    }
+
+    func testClearingTheQueryCancelsTheDownloads() async {
+        let (sut, presenter, worker, downloader) = makeSUT()
+        sut.fetchApps(request: .init(query: "spotify"))
+        await wait(for: worker.expectCalls(1))
+        worker.complete(call: 0, with: .success(spotify))
+        await wait(for: presenter.expectResponses(2))
+
+        sut.fetchApps(request: .init(query: ""))
+
+        XCTAssertEqual(
+            downloader.calls,
+            [.cancelAll, .enqueue(spotify.flatMap(\.screenshotURLs)), .cancelAll]
+        )
+    }
+
+    func testAFailedSearchQueuesNothing() async {
+        let (sut, presenter, worker, downloader) = makeSUT()
+
+        sut.fetchApps(request: .init(query: "spotify"))
+        await wait(for: worker.expectCalls(1))
+        worker.complete(call: 0, with: .failure(NetworkError.offline))
+        await wait(for: presenter.expectResponses(2))
+
+        XCTAssertEqual(downloader.calls, [.cancelAll])
+    }
+
     // MARK: - Lifetime
 
     func testReleasingTheInteractorCancelsTheRunningRequest() async throws {
         let presenter = SearchPresenterSpy()
         let worker = ControllableSearchWorker()
-        var sut: SearchInteractor? = SearchInteractor(presenter: presenter, worker: worker, debounce: .zero)
+        var sut: SearchInteractor? = SearchInteractor(
+            presenter: presenter,
+            worker: worker,
+            imageDownloader: ImageDownloadingSpy(),
+            debounce: .zero
+        )
         sut?.fetchApps(request: .init(query: "spotify"))
         let search = try XCTUnwrap(sut?.searchTask)
         await wait(for: worker.expectCalls(1))

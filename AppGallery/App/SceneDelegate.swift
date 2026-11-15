@@ -13,7 +13,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
         // Composition root: the app's long-lived dependencies are created here and injected.
         let worker = SearchWorker(apiClient: APIClient())
-        let searchViewController = SearchConfigurator.makeScene(worker: worker)
+        let images = ImageDownloadManager(fetcher: URLSessionImageFetcher())
+        let searchViewController = SearchConfigurator.makeScene(worker: worker, images: images)
 
         let window = UIWindow(windowScene: windowScene)
         window.rootViewController = UINavigationController(rootViewController: searchViewController)
