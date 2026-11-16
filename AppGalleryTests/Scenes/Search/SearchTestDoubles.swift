@@ -135,7 +135,7 @@ extension Search.FetchApps.Response {
         switch self {
         case .idle: return "idle"
         case .loading: return "loading"
-        case .loaded(let apps): return "loaded(\(apps.map { $0.name ?? "-" }.joined(separator: ", ")))"
+        case .loaded(_, let apps): return "loaded(\(apps.map { $0.name ?? "-" }.joined(separator: ", ")))"
         case .failed(let error): return "failed(\(error))"
         }
     }

@@ -10,7 +10,9 @@ import XCTest
 @MainActor
 final class SearchViewControllerImageTests: XCTestCase {
 
-    private let urls = (0..<4).compactMap { URL(string: "https://example.com/\($0).png") }
+    /// Three screenshots: on a 390 pt wide screen a gallery shows two and a half tiles,
+    /// so all three are on screen without scrolling.
+    private let urls = (0..<3).compactMap { URL(string: "https://example.com/\($0).png") }
 
     private func makeSUT(
         images: [URL: UIImage] = [:],
@@ -26,15 +28,15 @@ final class SearchViewControllerImageTests: XCTestCase {
         return (sut, stub)
     }
 
-    /// Shows one application with four screenshots; all four cells fit on the screen.
+    /// Shows one application whose three screenshots are all on screen.
     private func showResults(in sut: SearchViewController) {
         let section = Search.AppSection(
             title: "App",
-            subtitle: "Developer",
+            developer: "Developer",
             screenshotCountText: "\(urls.count) screenshots",
             screenshotURLs: urls
         )
-        sut.displayApps(viewModel: .results([section]))
+        sut.displayApps(viewModel: .results(summary: "1 result for “app”", sections: [section]))
         sut.view.layoutIfNeeded()
     }
 
@@ -61,6 +63,7 @@ final class SearchViewControllerImageTests: XCTestCase {
             let cell = try cell(showing: url, in: sut)
             XCTAssertNil(cell.displayedImage)
             XCTAssertFalse(cell.showsRetryHint)
+            XCTAssertTrue(cell.showsLoadingIndicator)
         }
         // This is also what brings back an image the cache has dropped.
         XCTAssertEqual(Set(images.requests), Set(urls.map { .init(url: $0, priority: .normal) }))
@@ -72,7 +75,9 @@ final class SearchViewControllerImageTests: XCTestCase {
 
         showResults(in: sut)
 
-        XCTAssertTrue(try cell(showing: urls[1], in: sut).displayedImage === image)
+        let cell = try cell(showing: urls[1], in: sut)
+        XCTAssertTrue(cell.displayedImage === image)
+        XCTAssertFalse(cell.showsLoadingIndicator)
         XCTAssertFalse(images.requests.contains { $0.url == urls[1] })
     }
 
@@ -81,7 +86,9 @@ final class SearchViewControllerImageTests: XCTestCase {
 
         showResults(in: sut)
 
-        XCTAssertTrue(try cell(showing: urls[2], in: sut).showsRetryHint)
+        let cell = try cell(showing: urls[2], in: sut)
+        XCTAssertTrue(cell.showsRetryHint)
+        XCTAssertFalse(cell.showsLoadingIndicator)
         XCTAssertFalse(images.requests.contains { $0.url == urls[2] })
     }
 
@@ -146,6 +153,7 @@ final class SearchViewControllerImageTests: XCTestCase {
         // Refreshing the cell afterwards also sends its usual normal request, so the retry is not the last one.
         XCTAssertTrue(images.requests.contains(.init(url: urls[0], priority: .high)))
         XCTAssertFalse(failedCell.showsRetryHint, "The cell is loading again")
+        XCTAssertTrue(failedCell.showsLoadingIndicator)
         XCTAssertNil(failedCell.displayedImage)
 
         images.images[urls[0]] = image
@@ -182,14 +190,5 @@ final class SearchViewControllerImageTests: XCTestCase {
 
         XCTAssertNil(weakSUT, "The observation task must not keep the view controller alive")
         await fulfillment(of: [images.subscriptionEnded], timeout: 2)
-    }
-}
-
-private extension UIView {
-
-    func descendants<View: UIView>(ofType type: View.Type) -> [View] {
-        subviews.flatMap { subview in
-            ((subview as? View).map { [$0] } ?? []) + subview.descendants(ofType: type)
-        }
     }
 }

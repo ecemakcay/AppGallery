@@ -26,7 +26,7 @@ final class SearchPresenterTests: XCTestCase {
     }
 
     func testNoResultsShowsAMessage() {
-        XCTAssertEqual(present(.loaded([])), .message("No applications found."))
+        XCTAssertEqual(present(.loaded(query: "spotify", apps: [])), .message("No applications found."))
     }
 
     // MARK: - Results
@@ -35,28 +35,37 @@ final class SearchPresenterTests: XCTestCase {
         let first = AppResult.stub("Spotify", developer: "Spotify AB", screenshots: 3)
         let second = AppResult.stub("YouTube", developer: "Google", screenshots: 1)
 
-        let viewModel = present(.loaded([first, second]))
+        let viewModel = present(.loaded(query: "music", apps: [first, second]))
 
-        XCTAssertEqual(viewModel, .results([
+        XCTAssertEqual(viewModel, .results(summary: "2 results for “music”", sections: [
             Search.AppSection(
                 title: "Spotify",
-                subtitle: "Spotify AB",
+                developer: "Spotify AB",
                 screenshotCountText: "3 screenshots",
                 screenshotURLs: first.screenshotURLs
             ),
             Search.AppSection(
                 title: "YouTube",
-                subtitle: "Google",
+                developer: "Google",
                 screenshotCountText: "1 screenshot",
                 screenshotURLs: second.screenshotURLs
             )
         ]))
     }
 
-    func testAnAppWithoutScreenshotsKeepsItsSection() {
-        let viewModel = present(.loaded([.stub("Spotify", screenshots: 0)]))
+    func testTheSummaryOfASingleResultIsSingular() {
+        let viewModel = present(.loaded(query: "spotify", apps: [.stub("Spotify")]))
 
-        guard case .results(let sections) = viewModel else {
+        guard case .results(let summary, _) = viewModel else {
+            return XCTFail("Expected results, got \(String(describing: viewModel))")
+        }
+        XCTAssertEqual(summary, "1 result for “spotify”")
+    }
+
+    func testAnAppWithoutScreenshotsKeepsItsSection() {
+        let viewModel = present(.loaded(query: "spotify", apps: [.stub("Spotify", screenshots: 0)]))
+
+        guard case .results(_, let sections) = viewModel else {
             return XCTFail("Expected results, got \(String(describing: viewModel))")
         }
         XCTAssertEqual(sections.map(\.screenshotCountText), ["No screenshots"])
@@ -64,13 +73,13 @@ final class SearchPresenterTests: XCTestCase {
     }
 
     func testMissingNameAndDeveloperGetFallbackTexts() {
-        let viewModel = present(.loaded([AppResult(name: nil, developer: nil, screenshotURLs: [])]))
+        let viewModel = present(.loaded(query: "spotify", apps: [AppResult(name: nil, developer: nil, screenshotURLs: [])]))
 
-        guard case .results(let sections) = viewModel else {
+        guard case .results(_, let sections) = viewModel else {
             return XCTFail("Expected results, got \(String(describing: viewModel))")
         }
         XCTAssertEqual(sections.map(\.title), ["Unknown application"])
-        XCTAssertEqual(sections.map(\.subtitle), [""])
+        XCTAssertEqual(sections.map(\.developer), [""])
     }
 
     // MARK: - Errors

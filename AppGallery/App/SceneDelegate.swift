@@ -16,8 +16,11 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         let images = ImageDownloadManager(fetcher: URLSessionImageFetcher())
         let searchViewController = SearchConfigurator.makeScene(worker: worker, images: images)
 
+        let navigationController = UINavigationController(rootViewController: searchViewController)
+        navigationController.navigationBar.prefersLargeTitles = true
+
         let window = UIWindow(windowScene: windowScene)
-        window.rootViewController = UINavigationController(rootViewController: searchViewController)
+        window.rootViewController = navigationController
         window.makeKeyAndVisible()
         self.window = window
     }

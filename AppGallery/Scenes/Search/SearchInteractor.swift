@@ -100,11 +100,11 @@ final class SearchInteractor: SearchBusinessLogic, SearchDataStore {
             } catch {
                 result = .failure(error)
             }
-            self?.finishSearch(generation: generation, result: result)
+            self?.finishSearch(generation: generation, query: query, result: result)
         }
     }
 
-    private func finishSearch(generation: Int, result: Result<[AppResult], any Error>) {
+    private func finishSearch(generation: Int, query: String, result: Result<[AppResult], any Error>) {
         // Cancellation only asks the old request to stop. This check is what guarantees that a
         // response which still arrives for an older query can never replace newer results.
         guard generation == self.generation else { return }
@@ -116,7 +116,7 @@ final class SearchInteractor: SearchBusinessLogic, SearchDataStore {
             // The case asks for every screenshot to be downloaded, so all of them are queued now,
             // whether or not their cells are visible. The manager keeps at most 3 in flight.
             imageDownloader.enqueue(apps.flatMap(\.screenshotURLs))
-            presenter.presentApps(response: .loaded(apps))
+            presenter.presentApps(response: .loaded(query: query, apps: apps))
         case .failure(let error) where error is CancellationError:
             break
         case .failure(let error):

@@ -6,8 +6,9 @@ protocol SearchDisplayLogic: AnyObject {
     func displayApps(viewModel: Search.FetchApps.ViewModel)
 }
 
-/// The search bar and the grid of screenshots. It forwards user input to the interactor
-/// and renders the view models it is given; it holds no business logic.
+/// The search bar and the list of applications, each with a gallery of screenshots that scrolls
+/// sideways. It forwards user input to the interactor and renders the view models it is given;
+/// it holds no business logic.
 final class SearchViewController: UIViewController {
 
     var interactor: (any SearchBusinessLogic)?
@@ -15,30 +16,21 @@ final class SearchViewController: UIViewController {
     var images: (any ImageProviding)?
 
     private enum Layout {
-        static let columns: CGFloat = 2
-        static let spacing: CGFloat = 12
-        static let horizontalInset: CGFloat = 16
-        static let sectionBottomInset: CGFloat = 24
-        /// Height over width of a portrait phone screenshot (the API returns 392x696 images).
-        static let screenshotAspectRatio: CGFloat = 16.0 / 9.0
+        /// Only estimates: the real heights come from the views' own constraints.
+        static let estimatedHeaderHeight: CGFloat = 64
+        static let estimatedSummaryHeight: CGFloat = 28
+        static let sectionBottomSpacing: CGFloat = 20
     }
 
+    private var summary = ""
     private var sections: [Search.AppSection] = []
 
     private let searchController = UISearchController(searchResultsController: nil)
 
-    private let collectionView: UICollectionView = {
-        let layout = UICollectionViewFlowLayout()
-        layout.minimumInteritemSpacing = Layout.spacing
-        layout.minimumLineSpacing = Layout.spacing
-        layout.sectionInset = UIEdgeInsets(
-            top: 0,
-            left: Layout.horizontalInset,
-            bottom: Layout.sectionBottomInset,
-            right: Layout.horizontalInset
-        )
-        return UICollectionView(frame: .zero, collectionViewLayout: layout)
-    }()
+    private let collectionView = UICollectionView(
+        frame: .zero,
+        collectionViewLayout: SearchViewController.makeLayout()
+    )
 
     private let stateView = SearchStateView()
 
@@ -64,10 +56,67 @@ final class SearchViewController: UIViewController {
         imageUpdatesTask?.cancel()
     }
 
+    // MARK: - Layout
+
+    /// One section per application, and each section scrolls sideways on its own.
+    ///
+    /// It is still a single collection view with the same data source as a plain list:
+    /// `orthogonalScrollingBehavior` is what turns a section into a horizontal gallery.
+    /// UIKit calls the closure again whenever the width changes (rotation, Split View),
+    /// so the tiles are always measured for the width that is available right now.
+    private static func makeLayout() -> UICollectionViewLayout {
+        let summary = NSCollectionLayoutBoundarySupplementaryItem(
+            layoutSize: NSCollectionLayoutSize(
+                widthDimension: .fractionalWidth(1),
+                heightDimension: .estimated(Layout.estimatedSummaryHeight)
+            ),
+            elementKind: SearchSummaryView.elementKind,
+            alignment: .top
+        )
+        let configuration = UICollectionViewCompositionalLayoutConfiguration()
+        configuration.boundarySupplementaryItems = [summary]
+
+        return UICollectionViewCompositionalLayout(sectionProvider: { _, environment in
+            let metrics = GalleryMetrics(containerWidth: environment.container.effectiveContentSize.width)
+
+            // Item: one tile. Group: the unit that repeats along the row, here a single tile.
+            let tileSize = NSCollectionLayoutSize(
+                widthDimension: .absolute(metrics.tileSize.width),
+                heightDimension: .absolute(metrics.tileSize.height)
+            )
+            let item = NSCollectionLayoutItem(layoutSize: tileSize)
+            let group = NSCollectionLayoutGroup.horizontal(layoutSize: tileSize, subitems: [item])
+
+            // Section: one application. Every tile has the same size, so the height of a
+            // section never changes while its gallery scrolls.
+            let section = NSCollectionLayoutSection(group: group)
+            section.orthogonalScrollingBehavior = .continuous
+            section.interGroupSpacing = metrics.spacing
+            section.contentInsets = NSDirectionalEdgeInsets(
+                top: 0,
+                leading: metrics.margin,
+                bottom: Layout.sectionBottomSpacing,
+                trailing: metrics.margin
+            )
+            section.boundarySupplementaryItems = [
+                NSCollectionLayoutBoundarySupplementaryItem(
+                    layoutSize: NSCollectionLayoutSize(
+                        widthDimension: .fractionalWidth(1),
+                        heightDimension: .estimated(Layout.estimatedHeaderHeight)
+                    ),
+                    elementKind: UICollectionView.elementKindSectionHeader,
+                    alignment: .top
+                )
+            ]
+            return section
+        }, configuration: configuration)
+    }
+
     // MARK: - Setup
 
     private func setupViews() {
-        title = "App Gallery"
+        title = "AppGallery"
+        navigationItem.largeTitleDisplayMode = .always
         view.backgroundColor = .systemBackground
         view.addSubview(collectionView)
         view.addSubview(stateView)
@@ -87,7 +136,7 @@ final class SearchViewController: UIViewController {
     private func configureSearchController() {
         searchController.searchResultsUpdater = self
         searchController.obscuresBackgroundDuringPresentation = false
-        searchController.searchBar.placeholder = "Search applications"
+        searchController.searchBar.placeholder = "Search apps"
         navigationItem.searchController = searchController
         navigationItem.hidesSearchBarWhenScrolling = false
         // Keeps the search bar under the title on every iOS version.
@@ -105,6 +154,11 @@ final class SearchViewController: UIViewController {
             AppSectionHeaderView.self,
             forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader,
             withReuseIdentifier: AppSectionHeaderView.reuseIdentifier
+        )
+        collectionView.register(
+            SearchSummaryView.self,
+            forSupplementaryViewOfKind: SearchSummaryView.elementKind,
+            withReuseIdentifier: SearchSummaryView.reuseIdentifier
         )
     }
 
@@ -157,20 +211,26 @@ extension SearchViewController: SearchDisplayLogic {
 
     func displayApps(viewModel: Search.FetchApps.ViewModel) {
         switch viewModel {
-        case .results(let sections):
+        case .results(let summary, let sections):
+            self.summary = summary
             self.sections = sections
             stateView.hide()
         case .loading:
-            sections = []
+            clearResults()
             stateView.showLoading()
         case .message(let message):
-            sections = []
+            clearResults()
             stateView.showMessage(message)
         case .error(let message):
-            sections = []
+            clearResults()
             stateView.showError(message)
         }
         collectionView.reloadData()
+    }
+
+    private func clearResults() {
+        summary = ""
+        sections = []
     }
 }
 
@@ -215,21 +275,32 @@ extension SearchViewController: UICollectionViewDataSource {
         viewForSupplementaryElementOfKind kind: String,
         at indexPath: IndexPath
     ) -> UICollectionReusableView {
+        // The summary belongs to the whole list; every other supplementary view is an application's header.
+        if kind == SearchSummaryView.elementKind {
+            let view = collectionView.dequeueReusableSupplementaryView(
+                ofKind: kind,
+                withReuseIdentifier: SearchSummaryView.reuseIdentifier,
+                for: indexPath
+            )
+            (view as? SearchSummaryView)?.configure(text: summary)
+            return view
+        }
+
         let view = collectionView.dequeueReusableSupplementaryView(
             ofKind: kind,
             withReuseIdentifier: AppSectionHeaderView.reuseIdentifier,
             for: indexPath
         )
         if let header = view as? AppSectionHeaderView {
-            header.configure(with: sections[indexPath.section])
+            header.configure(with: sections[indexPath.section], showsSeparator: indexPath.section > 0)
         }
         return view
     }
 }
 
-// MARK: - UICollectionViewDelegateFlowLayout
+// MARK: - UICollectionViewDelegate
 
-extension SearchViewController: UICollectionViewDelegateFlowLayout {
+extension SearchViewController: UICollectionViewDelegate {
 
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         let url = sections[indexPath.section].screenshotURLs[indexPath.item]
@@ -237,23 +308,5 @@ extension SearchViewController: UICollectionViewDelegateFlowLayout {
         // Tapping a failed screenshot retries it, ahead of the downloads that are still waiting.
         images.request(url, priority: .high)
         refreshCells(showing: url)
-    }
-
-    func collectionView(
-        _ collectionView: UICollectionView,
-        layout collectionViewLayout: UICollectionViewLayout,
-        sizeForItemAt indexPath: IndexPath
-    ) -> CGSize {
-        let totalSpacing = Layout.horizontalInset * 2 + Layout.spacing * (Layout.columns - 1)
-        let width = max(0, ((collectionView.bounds.width - totalSpacing) / Layout.columns).rounded(.down))
-        return CGSize(width: width, height: (width * Layout.screenshotAspectRatio).rounded(.down))
-    }
-
-    func collectionView(
-        _ collectionView: UICollectionView,
-        layout collectionViewLayout: UICollectionViewLayout,
-        referenceSizeForHeaderInSection section: Int
-    ) -> CGSize {
-        CGSize(width: collectionView.bounds.width, height: AppSectionHeaderView.preferredHeight)
     }
 }

@@ -16,7 +16,7 @@ enum Search {
             case idle
             /// A search for the current query is pending.
             case loading
-            case loaded([AppResult])
+            case loaded(query: String, apps: [AppResult])
             case failed(any Error)
         }
 
@@ -25,7 +25,8 @@ enum Search {
             /// A centered text: the idle hint or "no results".
             case message(String)
             case loading
-            case results([AppSection])
+            /// `summary` is the line above the list, such as: 24 results for “weather”.
+            case results(summary: String, sections: [AppSection])
             /// A centered text with a Retry button.
             case error(message: String)
         }
@@ -34,7 +35,9 @@ enum Search {
     /// One application, displayed as a collection view section.
     struct AppSection: Equatable {
         let title: String
-        let subtitle: String
+        /// Empty when the API did not name a developer.
+        let developer: String
+        /// For example "8 screenshots". The header decides how it is placed next to the developer.
         let screenshotCountText: String
         let screenshotURLs: [URL]
     }

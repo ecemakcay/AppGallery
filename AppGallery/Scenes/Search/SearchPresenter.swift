@@ -23,10 +23,10 @@ final class SearchPresenter: SearchPresentationLogic {
             return .message("Search for an application to see its screenshots.")
         case .loading:
             return .loading
-        case .loaded(let apps) where apps.isEmpty:
+        case .loaded(_, let apps) where apps.isEmpty:
             return .message("No applications found.")
-        case .loaded(let apps):
-            return .results(apps.map(makeSection))
+        case .loaded(let query, let apps):
+            return .results(summary: summary(for: apps.count, query: query), sections: apps.map(makeSection))
         case .failed(let error):
             return .error(message: message(for: error))
         }
@@ -35,10 +35,15 @@ final class SearchPresenter: SearchPresentationLogic {
     private func makeSection(for app: AppResult) -> Search.AppSection {
         Search.AppSection(
             title: app.name ?? "Unknown application",
-            subtitle: app.developer ?? "",
+            developer: app.developer ?? "",
             screenshotCountText: screenshotCountText(for: app.screenshotURLs.count),
             screenshotURLs: app.screenshotURLs
         )
+    }
+
+    private func summary(for resultCount: Int, query: String) -> String {
+        let results = resultCount == 1 ? "1 result" : "\(resultCount) results"
+        return "\(results) for “\(query)”"
     }
 
     private func screenshotCountText(for count: Int) -> String {

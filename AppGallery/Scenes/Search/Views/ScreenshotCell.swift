@@ -1,7 +1,7 @@
 import SnapKit
 import UIKit
 
-/// One screenshot in the grid: the image, a placeholder while it loads, or a retry hint if it failed.
+/// One screenshot tile: the image, a spinner while it loads, or a retry icon if it failed.
 final class ScreenshotCell: UICollectionViewCell {
 
     static let reuseIdentifier = "ScreenshotCell"
@@ -13,10 +13,7 @@ final class ScreenshotCell: UICollectionViewCell {
     }
 
     private enum Layout {
-        static let cornerRadius: CGFloat = 12
-        static let statusSpacing: CGFloat = 6
-        static let statusInset: CGFloat = 8
-        static let symbolPointSize: CGFloat = 28
+        static let retrySymbolPointSize: CGFloat = 24
     }
 
     /// The screenshot this cell shows right now. An update is matched against this URL and never
@@ -29,7 +26,11 @@ final class ScreenshotCell: UICollectionViewCell {
     }
 
     var showsRetryHint: Bool {
-        !statusStackView.isHidden && !statusLabel.isHidden
+        !retryIconView.isHidden
+    }
+
+    var showsLoadingIndicator: Bool {
+        loadingIndicator.isAnimating
     }
 
     private let imageView: UIImageView = {
@@ -38,30 +39,16 @@ final class ScreenshotCell: UICollectionViewCell {
         return imageView
     }()
 
-    private let statusStackView: UIStackView = {
-        let stackView = UIStackView()
-        stackView.axis = .vertical
-        stackView.alignment = .center
-        stackView.spacing = Layout.statusSpacing
-        return stackView
-    }()
+    /// Small on purpose: there is no other download progress anywhere in the interface.
+    private let loadingIndicator = UIActivityIndicatorView(style: .medium)
 
-    private let statusSymbolView: UIImageView = {
-        let imageView = UIImageView()
-        imageView.tintColor = .tertiaryLabel
-        imageView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: Layout.symbolPointSize)
+    private let retryIconView: UIImageView = {
+        let imageView = UIImageView(image: UIImage(systemName: "arrow.clockwise"))
+        imageView.tintColor = .secondaryLabel
+        imageView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: Layout.retrySymbolPointSize)
+        imageView.accessibilityLabel = "Retry"
+        imageView.isAccessibilityElement = true
         return imageView
-    }()
-
-    private let statusLabel: UILabel = {
-        let label = UILabel()
-        label.text = "Tap to retry"
-        label.font = .preferredFont(forTextStyle: .footnote)
-        label.adjustsFontForContentSizeCategory = true
-        label.textColor = .secondaryLabel
-        label.textAlignment = .center
-        label.numberOfLines = 0
-        return label
     }()
 
     override init(frame: CGRect) {
@@ -93,38 +80,38 @@ final class ScreenshotCell: UICollectionViewCell {
         switch state {
         case .loading:
             imageView.image = nil
-            statusSymbolView.image = UIImage(systemName: "photo")
-            statusLabel.isHidden = true
-            statusStackView.isHidden = false
+            retryIconView.isHidden = true
+            loadingIndicator.startAnimating()
         case .image(let image):
             imageView.image = image
-            statusStackView.isHidden = true
+            retryIconView.isHidden = true
+            loadingIndicator.stopAnimating()
         case .failed:
             imageView.image = nil
-            statusSymbolView.image = UIImage(systemName: "arrow.clockwise")
-            statusLabel.isHidden = false
-            statusStackView.isHidden = false
+            retryIconView.isHidden = false
+            loadingIndicator.stopAnimating()
         }
     }
 
     private func setupViews() {
         contentView.backgroundColor = .secondarySystemBackground
-        contentView.layer.cornerRadius = Layout.cornerRadius
+        contentView.layer.cornerRadius = GalleryMetrics.cornerRadius
+        contentView.layer.cornerCurve = .continuous
         contentView.layer.masksToBounds = true
         contentView.addSubview(imageView)
-        contentView.addSubview(statusStackView)
-        statusStackView.addArrangedSubview(statusSymbolView)
-        statusStackView.addArrangedSubview(statusLabel)
+        contentView.addSubview(loadingIndicator)
+        contentView.addSubview(retryIconView)
     }
 
     private func setupConstraints() {
         imageView.snp.makeConstraints { make in
             make.edges.equalToSuperview()
         }
-        statusStackView.snp.makeConstraints { make in
+        loadingIndicator.snp.makeConstraints { make in
             make.center.equalToSuperview()
-            make.leading.greaterThanOrEqualToSuperview().inset(Layout.statusInset)
-            make.trailing.lessThanOrEqualToSuperview().inset(Layout.statusInset)
+        }
+        retryIconView.snp.makeConstraints { make in
+            make.center.equalToSuperview()
         }
     }
 }

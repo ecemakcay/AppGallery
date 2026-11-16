@@ -106,6 +106,10 @@ final class SearchInteractorTests: XCTestCase {
         await wait(for: presenter.expectResponses(2))
 
         XCTAssertEqual(worker.terms, ["spotify"], "The query is trimmed before it is sent")
+        guard case .loaded(let query, _) = presenter.responses.last else {
+            return XCTFail("Expected a loaded response")
+        }
+        XCTAssertEqual(query, "spotify", "The presenter gets the query for the summary line")
         XCTAssertEqual(presenter.responses.map(\.summary), ["loading", "loaded(Spotify, SpotifyKids)"])
         XCTAssertEqual(sut.apps, spotify)
     }
