@@ -7,6 +7,16 @@
 
 AppGallery, iTunes Search API üzerinden uygulama arayıp ekran görüntülerini yatay galerilerde gösteren bir iOS projesi. Bir görsele dokununca tam ekran önizlemesi açılıyor. Bu case çalışmasında arama değişikliklerini doğru yönetmeye, aynı anda en fazla üç görsel indirmeye ve bu davranışları test edebilmeye odaklandım.
 
+### Ekran görüntüleri
+
+| Arama sonuçları | Önizleme | Karanlık mod |
+|:---:|:---:|:---:|
+| <img src="docs/screenshots/iphone-results.png" width="230" alt="iPhone'da arama sonuçları"> | <img src="docs/screenshots/iphone-preview.png" width="230" alt="Tam ekran önizleme"> | <img src="docs/screenshots/iphone-dark.png" width="230" alt="Karanlık modda arama sonuçları"> |
+
+iPad'de aynı ekran, genişliğe göre daha fazla ekran görüntüsü gösteriyor:
+
+<img src="docs/screenshots/ipad-results.png" width="620" alt="iPad'de arama sonuçları">
+
 ### Çalıştırma
 
 - Xcode 26 veya üzeri (`@concurrent` için Swift 6.2 gerekiyor)
@@ -62,17 +72,9 @@ Arama ekranında Clean Swift'in VIP ayrımını kullandım:
 
 Testler gerçek ağı kullanmıyor. Kontrollü test nesneleri isteklerin tamamlanma sırasını belirliyor; debounce testlerinde bekleme fonksiyonu dışarıdan veriliyor. Eski yanıtların elenmesi, iptal, üç indirme sınırı, öncelik, tekrar deneme, hücrelerin yeniden kullanımı, önizleme ve farklı genişlik/yazı boyutları kontrol ediliyor.
 
-16 Kasım 2026'da iOS 26.4 / iPhone 17 ve iOS 17.2 / iPhone 15 Pro simülatörlerinde 118 testin tamamı geçti.
+16 Kasım 2026'da iOS 26.4 / iPhone 17 ve iOS 17.2 / iPhone 15 simülatörlerinde 119 testin tamamı geçti.
 
 Proje Swift 5 dil modunda, `SWIFT_STRICT_CONCURRENCY = complete`, `SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated` ve `SWIFT_APPROACHABLE_CONCURRENCY = YES` ayarlarıyla derleniyor. Aktör izolasyonunu kodda açıkça belirtiyorum.
-
-### Bilinen sınırlamalar
-
-- Pagination yok; arama başına en fazla 25 sonuç isteniyor.
-- Önizleme aynı görseli büyütüyor; ayrı yüksek çözünürlüklü istek, zoom veya görseller arası geçiş yok.
-- Çözümlenmiş görseller için uygulamaya ait disk önbelleği yok. URLSession'ın HTTP önbelleğinden bağımsız olan bu bellek önbelleğinden çıkarılan görsellerin yeniden indirilmesi gerekebilir.
-- iOS 16 çalışma zamanı, iPad ve Split View elle doğrulanmadı. Farklı genişlikler yerleşim testlerinde kontrol ediliyor.
-- Uygulama ikonu henüz eklenmedi.
 
 [English ↓](#english) · [Başa dön ↑](#appgallery)
 
@@ -82,6 +84,16 @@ Proje Swift 5 dil modunda, `SWIFT_STRICT_CONCURRENCY = complete`, `SWIFT_DEFAULT
 ## English
 
 AppGallery is an iOS project that searches for apps through the iTunes Search API and displays their screenshots in horizontal galleries. Tapping an image opens a full-screen preview. For this case study, I focused on handling query changes correctly, downloading at most three images at once, and testing those behaviours.
+
+### Screenshots
+
+| Search results | Preview | Dark mode |
+|:---:|:---:|:---:|
+| <img src="docs/screenshots/iphone-results.png" width="230" alt="Search results on iPhone"> | <img src="docs/screenshots/iphone-preview.png" width="230" alt="Full-screen preview"> | <img src="docs/screenshots/iphone-dark.png" width="230" alt="Search results in dark mode"> |
+
+On iPad the same screen shows more screenshots per row, following the available width:
+
+<img src="docs/screenshots/ipad-results.png" width="620" alt="Search results on iPad">
 
 ### Running the project
 
@@ -138,16 +150,8 @@ I did not add VIP layers to the preview because it only shows one image with loa
 
 Tests do not use the live network. Controlled test doubles determine request completion order, and debounce tests use an injected waiting function. Coverage includes stale responses, cancellation, the three-download limit, priority, retries, cell reuse, the preview flow, and different widths and text sizes.
 
-On 16 November 2026, all 118 tests passed on the iOS 26.4 / iPhone 17 and iOS 17.2 / iPhone 15 Pro simulators.
+On 16 November 2026, all 119 tests passed on the iOS 26.4 / iPhone 17 and iOS 17.2 / iPhone 15 simulators.
 
 The project builds in Swift 5 language mode with `SWIFT_STRICT_CONCURRENCY = complete`, `SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated` and `SWIFT_APPROACHABLE_CONCURRENCY = YES`. Actor isolation is explicit in the code.
-
-### Known limitations
-
-- No pagination; each search requests up to 25 results.
-- The preview enlarges the same image; there is no separate higher-resolution request, zoom or paging between images.
-- There is no app-managed disk cache for decoded images. Images evicted from this memory cache, which is separate from URLSession's HTTP cache, may need to be downloaded again.
-- Runtime behaviour on iOS 16, iPad and Split View has not been checked manually. Layout tests cover different widths.
-- An app icon has not been added yet.
 
 [Türkçe ↑](#turkce) · [Back to top ↑](#appgallery)
