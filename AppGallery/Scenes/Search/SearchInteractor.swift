@@ -4,12 +4,15 @@ import Foundation
 protocol SearchBusinessLogic: AnyObject {
     func fetchApps(request: Search.FetchApps.Request)
     func retryLastQuery()
+    func selectScreenshot(request: Search.SelectScreenshot.Request)
 }
 
 @MainActor
 protocol SearchDataStore: AnyObject {
     /// The applications currently on screen, in API order.
     var apps: [AppResult] { get }
+    /// The screenshot the user tapped last, for the router to hand to the preview.
+    var selectedScreenshotURL: URL? { get }
 }
 
 /// Decides when to search and which response is still relevant.
@@ -30,6 +33,7 @@ final class SearchInteractor: SearchBusinessLogic, SearchDataStore {
     private let sleep: (Duration) async throws -> Void
 
     private(set) var apps: [AppResult] = []
+    private(set) var selectedScreenshotURL: URL?
 
     /// The trimmed query that is displayed or being searched for. `nil` until the first request.
     private var currentQuery: String?
@@ -69,6 +73,17 @@ final class SearchInteractor: SearchBusinessLogic, SearchDataStore {
         startSearch(for: currentQuery, after: .zero)
     }
 
+    func selectScreenshot(request: Search.SelectScreenshot.Request) {
+        // The indexes come from the screen. They are checked instead of trusted, so a tap that
+        // races with a change of results selects nothing rather than crashing.
+        guard apps.indices.contains(request.appIndex) else {
+            selectedScreenshotURL = nil
+            return
+        }
+        let urls = apps[request.appIndex].screenshotURLs
+        selectedScreenshotURL = urls.indices.contains(request.screenshotIndex) ? urls[request.screenshotIndex] : nil
+    }
+
     // MARK: - Search
 
     private func startSearch(for query: String, after delay: Duration) {
@@ -77,6 +92,7 @@ final class SearchInteractor: SearchBusinessLogic, SearchDataStore {
         searchTask?.cancel()
         searchTask = nil
         apps = []
+        selectedScreenshotURL = nil
         // The screenshots of the previous results are no longer wanted.
         imageDownloader.cancelAll()
 

@@ -118,6 +118,44 @@ final class SearchPresenterSpy: SearchPresentationLogic {
     }
 }
 
+/// Records what the view controller asks of the interactor.
+@MainActor
+final class SearchBusinessLogicSpy: SearchBusinessLogic {
+
+    private(set) var queries: [String] = []
+    private(set) var retryCount = 0
+    private(set) var selections: [Search.SelectScreenshot.Request] = []
+
+    func fetchApps(request: Search.FetchApps.Request) {
+        queries.append(request.query)
+    }
+
+    func retryLastQuery() {
+        retryCount += 1
+    }
+
+    func selectScreenshot(request: Search.SelectScreenshot.Request) {
+        selections.append(request)
+    }
+}
+
+@MainActor
+final class SearchRouterSpy: SearchRoutingLogic {
+
+    private(set) var previewRouteCount = 0
+
+    func routeToPreview() {
+        previewRouteCount += 1
+    }
+}
+
+@MainActor
+final class SearchDataStoreStub: SearchDataStore {
+
+    var apps: [AppResult] = []
+    var selectedScreenshotURL: URL?
+}
+
 @MainActor
 final class SearchDisplaySpy: SearchDisplayLogic {
 

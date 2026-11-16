@@ -304,6 +304,49 @@ final class SearchInteractorTests: XCTestCase {
         XCTAssertEqual(downloader.calls, [.cancelAll])
     }
 
+    // MARK: - Selecting a screenshot
+
+    func testSelectingAScreenshotStoresItsURLForTheRouter() async {
+        let (sut, presenter, worker, _) = makeSUT()
+        sut.fetchApps(request: .init(query: "spotify"))
+        await wait(for: worker.expectCalls(1))
+        worker.complete(call: 0, with: .success(spotify))
+        await wait(for: presenter.expectResponses(2))
+        XCTAssertNil(sut.selectedScreenshotURL)
+
+        sut.selectScreenshot(request: .init(appIndex: 1, screenshotIndex: 0))
+
+        XCTAssertEqual(sut.selectedScreenshotURL, spotify[1].screenshotURLs[0])
+    }
+
+    func testSelectingAPositionThatDoesNotExistSelectsNothing() async {
+        let (sut, presenter, worker, _) = makeSUT()
+        sut.fetchApps(request: .init(query: "spotify"))
+        await wait(for: worker.expectCalls(1))
+        worker.complete(call: 0, with: .success(spotify))
+        await wait(for: presenter.expectResponses(2))
+        sut.selectScreenshot(request: .init(appIndex: 0, screenshotIndex: 0))
+
+        sut.selectScreenshot(request: .init(appIndex: 7, screenshotIndex: 0))
+        XCTAssertNil(sut.selectedScreenshotURL)
+
+        sut.selectScreenshot(request: .init(appIndex: 0, screenshotIndex: 99))
+        XCTAssertNil(sut.selectedScreenshotURL)
+    }
+
+    func testAChangedQueryForgetsTheSelection() async {
+        let (sut, presenter, worker, _) = makeSUT()
+        sut.fetchApps(request: .init(query: "spotify"))
+        await wait(for: worker.expectCalls(1))
+        worker.complete(call: 0, with: .success(spotify))
+        await wait(for: presenter.expectResponses(2))
+        sut.selectScreenshot(request: .init(appIndex: 0, screenshotIndex: 0))
+
+        sut.fetchApps(request: .init(query: ""))
+
+        XCTAssertNil(sut.selectedScreenshotURL)
+    }
+
     // MARK: - Lifetime
 
     func testReleasingTheInteractorCancelsTheRunningRequest() async throws {

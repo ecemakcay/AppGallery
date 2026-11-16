@@ -21,20 +21,32 @@ final class SearchConfiguratorTests: XCTestCase {
         XCTAssertEqual(worker.terms, [], "The initial empty query must not be sent")
     }
 
+    func testTheRouterIsWiredToTheViewControllerAndToTheInteractorsDataStore() throws {
+        let viewController = makeScene(worker: ControllableSearchWorker())
+
+        let router = try XCTUnwrap(viewController.router as? SearchRouter)
+
+        XCTAssertTrue(router.viewController === viewController)
+        XCTAssertTrue(router.dataStore === viewController.interactor)
+    }
+
     /// Guards the ownership described in `SearchConfigurator`: no retain cycle between the VIP parts.
     func testTheSceneIsReleasedTogetherWithItsViewController() {
         weak var weakViewController: SearchViewController?
         weak var weakInteractor: AnyObject?
+        weak var weakRouter: AnyObject?
 
         autoreleasepool {
             let viewController = makeScene(worker: ControllableSearchWorker())
             viewController.loadViewIfNeeded()
             weakViewController = viewController
             weakInteractor = viewController.interactor
+            weakRouter = viewController.router
         }
 
         XCTAssertNil(weakViewController)
         XCTAssertNil(weakInteractor)
+        XCTAssertNil(weakRouter)
     }
 }
 

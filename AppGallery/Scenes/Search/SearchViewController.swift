@@ -12,6 +12,7 @@ protocol SearchDisplayLogic: AnyObject {
 final class SearchViewController: UIViewController {
 
     var interactor: (any SearchBusinessLogic)?
+    var router: (any SearchRoutingLogic)?
     /// Read-only access to the screenshots. Scheduling them is the interactor's decision.
     var images: (any ImageProviding)?
 
@@ -304,9 +305,16 @@ extension SearchViewController: UICollectionViewDelegate {
 
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         let url = sections[indexPath.section].screenshotURLs[indexPath.item]
-        guard let images, images.hasFailed(url) else { return }
-        // Tapping a failed screenshot retries it, ahead of the downloads that are still waiting.
-        images.request(url, priority: .high)
-        refreshCells(showing: url)
+        if let images, images.hasFailed(url) {
+            // Tapping a failed screenshot retries it, ahead of the downloads that are still waiting.
+            images.request(url, priority: .high)
+            refreshCells(showing: url)
+            return
+        }
+        // Clean Swift routing: the interactor records what was selected in its data store,
+        // and the router reads it from there when it builds the next screen.
+        let request = Search.SelectScreenshot.Request(appIndex: indexPath.section, screenshotIndex: indexPath.item)
+        interactor?.selectScreenshot(request: request)
+        router?.routeToPreview()
     }
 }

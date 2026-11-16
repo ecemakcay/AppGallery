@@ -163,16 +163,41 @@ final class SearchViewControllerImageTests: XCTestCase {
         XCTAssertTrue(failedCell.displayedImage === image)
     }
 
-    func testTappingACellThatHasNotFailedRequestsNothing() throws {
+    // MARK: - Preview
+
+    func testTappingAScreenshotSelectsItAndRoutesToThePreview() throws {
         let (sut, images) = makeSUT()
+        let interactor = SearchBusinessLogicSpy()
+        let router = SearchRouterSpy()
+        sut.interactor = interactor
+        sut.router = router
         showResults(in: sut)
         let collectionView = try XCTUnwrap(sut.view.descendants(ofType: UICollectionView.self).first)
-        let indexPath = try XCTUnwrap(collectionView.indexPath(for: try cell(showing: urls[0], in: sut)))
+        let indexPath = try XCTUnwrap(collectionView.indexPath(for: try cell(showing: urls[2], in: sut)))
         let requestsBefore = images.requests
 
         collectionView.delegate?.collectionView?(collectionView, didSelectItemAt: indexPath)
 
-        XCTAssertEqual(images.requests, requestsBefore)
+        XCTAssertEqual(interactor.selections.map(\.appIndex), [0])
+        XCTAssertEqual(interactor.selections.map(\.screenshotIndex), [2])
+        XCTAssertEqual(router.previewRouteCount, 1)
+        XCTAssertEqual(images.requests, requestsBefore, "Opening the preview is not a retry")
+    }
+
+    func testTappingAFailedScreenshotRetriesInsteadOfOpeningThePreview() throws {
+        let (sut, _) = makeSUT(failed: [urls[0]])
+        let interactor = SearchBusinessLogicSpy()
+        let router = SearchRouterSpy()
+        sut.interactor = interactor
+        sut.router = router
+        showResults(in: sut)
+        let collectionView = try XCTUnwrap(sut.view.descendants(ofType: UICollectionView.self).first)
+        let indexPath = try XCTUnwrap(collectionView.indexPath(for: try cell(showing: urls[0], in: sut)))
+
+        collectionView.delegate?.collectionView?(collectionView, didSelectItemAt: indexPath)
+
+        XCTAssertTrue(interactor.selections.isEmpty)
+        XCTAssertEqual(router.previewRouteCount, 0)
     }
 
     // MARK: - Lifetime

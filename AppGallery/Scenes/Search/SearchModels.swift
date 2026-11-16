@@ -32,6 +32,15 @@ enum Search {
         }
     }
 
+    /// Use case: the user taps a screenshot to see it large.
+    enum SelectScreenshot {
+
+        struct Request {
+            let appIndex: Int
+            let screenshotIndex: Int
+        }
+    }
+
     /// One application, displayed as a collection view section.
     struct AppSection: Equatable {
         let title: String
