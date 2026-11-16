@@ -93,10 +93,6 @@ final class PreviewViewController: UIViewController {
         imageUpdatesTask?.cancel()
     }
 
-    override var preferredStatusBarStyle: UIStatusBarStyle {
-        .lightContent
-    }
-
     // MARK: - Lifecycle
 
     override func viewDidLoad() {
@@ -115,7 +111,8 @@ final class PreviewViewController: UIViewController {
     // MARK: - Setup
 
     private func setupViews() {
-        // The preview is dark in both appearances; the semantic colors below follow this.
+        // The preview is dark in both appearances. The semantic colors follow this, and so does the
+        // status bar, which shows light text while the preview is up.
         overrideUserInterfaceStyle = .dark
         view.backgroundColor = .black
         view.addSubview(imageView)

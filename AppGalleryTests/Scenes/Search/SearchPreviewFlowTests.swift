@@ -45,7 +45,7 @@ final class SearchPreviewFlowTests: XCTestCase {
         self.fetcher = fetcher
         let images = ImageDownloadManager(fetcher: fetcher)
         let sut = SearchConfigurator.makeScene(worker: worker, images: images, debounce: .zero)
-        let navigationController = UINavigationController(rootViewController: sut)
+        let navigationController = AppNavigationController(rootViewController: sut)
 
         let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
         let window = scene.map(UIWindow.init(windowScene:)) ?? UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
@@ -130,6 +130,36 @@ final class SearchPreviewFlowTests: XCTestCase {
         XCTAssertEqual(scene.worker.terms, ["spotify"], "No new search was started")
         XCTAssertEqual(scene.fetcher.cancelledCalls, [], "No download was cancelled")
         XCTAssertEqual(scene.fetcher.runningCount, 3, "The three downloads are still running")
+    }
+
+    /// `.default` is drawn in the right color for the mode by the system; an explicit style must match the mode.
+    private func readable(_ style: UIStatusBarStyle, in mode: UIUserInterfaceStyle) -> Bool {
+        style == .default || style == (mode == .dark ? .lightContent : .darkContent)
+    }
+
+    /// Before the fix, the navigation controller kept answering "light text" after the preview had been
+    /// dismissed, so in light mode the clock was white on white.
+    func testTheStatusBarFollowsLightAndDarkModeAfterThePreviewCloses() async throws {
+        let scene = try makeScene()
+        let window = try XCTUnwrap(self.window)
+        let statusBar = try XCTUnwrap(window.windowScene?.statusBarManager)
+        window.overrideUserInterfaceStyle = .dark
+        await search("spotify", in: scene)
+        await waitUntil("light text on the dark background") { self.readable(statusBar.statusBarStyle, in: .dark) }
+
+        scene.collectionView.delegate?.collectionView?(scene.collectionView, didSelectItemAt: IndexPath(item: 0, section: 0))
+        await waitUntil("the preview is on screen") {
+            self.topmost(of: scene.navigationController) is PreviewViewController
+        }
+        let preview = try XCTUnwrap(topmost(of: scene.navigationController) as? PreviewViewController)
+        let close = try XCTUnwrap(preview.view.descendants(ofType: UIButton.self).first { $0.accessibilityLabel == "Close" })
+        close.sendActions(for: .touchUpInside)
+        await waitUntil("the preview is gone") { preview.presentingViewController == nil && preview.view.window == nil }
+
+        window.overrideUserInterfaceStyle = .light
+        await waitUntil("dark text on the light background") { self.readable(statusBar.statusBarStyle, in: .light) }
+        window.overrideUserInterfaceStyle = .dark
+        await waitUntil("light text on the dark background again") { self.readable(statusBar.statusBarStyle, in: .dark) }
     }
 
     func testThePreviewShowsTheScreenshotThatWasTapped() async throws {
