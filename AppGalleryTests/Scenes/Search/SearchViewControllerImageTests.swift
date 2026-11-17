@@ -138,6 +138,31 @@ final class SearchViewControllerImageTests: XCTestCase {
         XCTAssertEqual(reusedCell.representedURL, otherURL)
     }
 
+    /// UIKit also holds cells that are not on screen: cells prepared ahead of scrolling, and cells
+    /// that have just scrolled out and may come back. They are not among the visible cells, so a
+    /// download that ends meanwhile does not reach them, and UIKit can show them again without asking
+    /// the data source. Before the fix such a tile came back with its spinner and kept it, although
+    /// its image was in memory, until it was scrolled far enough away to be reused.
+    func testACellThatMissedAnUpdateWhileOffScreenIsBroughtUpToDateBeforeItIsShown() async throws {
+        let (sut, images) = makeSUT()
+        showResults(in: sut)
+        let collectionView = try XCTUnwrap(sut.view.descendants(ofType: UICollectionView.self).first)
+        // Stands for a cell UIKit keeps aside, configured while the first screenshot was still loading.
+        let keptCell = ScreenshotCell()
+        keptCell.configure(url: urls[0], state: .loading)
+        let image = UIImage()
+
+        images.images[urls[0]] = image
+        images.send(urls[0])
+        try await deliverUpdates(from: images, to: sut)
+        XCTAssertNil(keptCell.displayedImage, "Updates only reach the visible cells")
+
+        collectionView.delegate?.collectionView?(collectionView, willDisplay: keptCell, forItemAt: IndexPath(item: 0, section: 0))
+
+        XCTAssertTrue(keptCell.displayedImage === image)
+        XCTAssertFalse(keptCell.showsLoadingIndicator)
+    }
+
     // MARK: - Retry
 
     func testTappingAFailedCellRetriesWithHighPriorityAndThenShowsTheImage() async throws {

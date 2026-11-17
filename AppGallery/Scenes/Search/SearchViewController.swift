@@ -303,6 +303,23 @@ extension SearchViewController: UICollectionViewDataSource {
 
 extension SearchViewController: UICollectionViewDelegate {
 
+    /// Brings a cell up to date right before it is shown.
+    ///
+    /// UIKit can show a cell again without calling `cellForItemAt`: a cell prepared ahead of the
+    /// scrolling, or one that has just scrolled out and comes back. While such a cell is off screen it
+    /// is not among `visibleCells`, so `refreshCells(showing:)` misses a download that ends then, and
+    /// the tile would come back with its spinner although its image is in memory.
+    func collectionView(
+        _ collectionView: UICollectionView,
+        willDisplay cell: UICollectionViewCell,
+        forItemAt indexPath: IndexPath
+    ) {
+        guard let cell = cell as? ScreenshotCell,
+              sections.indices.contains(indexPath.section),
+              sections[indexPath.section].screenshotURLs.indices.contains(indexPath.item) else { return }
+        configure(cell, with: sections[indexPath.section].screenshotURLs[indexPath.item])
+    }
+
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         let url = sections[indexPath.section].screenshotURLs[indexPath.item]
         if let images, images.hasFailed(url) {
