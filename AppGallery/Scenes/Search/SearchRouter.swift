@@ -23,14 +23,19 @@ final class SearchRouter: SearchRoutingLogic, SearchDataPassing {
         self.images = images
     }
 
-    /// Presents the screenshot the interactor recorded as selected, full screen.
+    /// Presents the screenshot the interactor recorded as selected, full screen, together with the
+    /// rest of its application's gallery to swipe through.
     ///
-    /// The preview gets the same download manager as the list. If its image is not there yet, it asks
+    /// The preview gets the same download manager as the list. If an image is not there yet, it asks
     /// that manager for it, so the limit of three concurrent downloads holds on this screen as well.
     func routeToPreview() {
-        guard let url = dataStore?.selectedScreenshotURL else { return }
+        guard let selection = dataStore?.selectedScreenshot else { return }
 
-        let preview = PreviewViewController(url: url, images: images)
+        let preview = PreviewViewController(
+            urls: selection.screenshotURLs,
+            startIndex: selection.index,
+            images: images
+        )
         preview.modalPresentationStyle = .fullScreen
         viewController?.present(preview, animated: true)
     }

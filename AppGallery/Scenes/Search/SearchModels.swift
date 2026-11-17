@@ -39,6 +39,13 @@ enum Search {
             let appIndex: Int
             let screenshotIndex: Int
         }
+
+        /// What the interactor records for the router: the whole gallery of the tapped application,
+        /// so the preview can page through it, and where in it the tapped screenshot is.
+        struct Selection: Equatable {
+            let screenshotURLs: [URL]
+            let index: Int
+        }
     }
 
     /// One application, displayed as a collection view section.

@@ -1,135 +1,138 @@
 import XCTest
 @testable import AppGallery
 
-/// The preview gets a stub in place of the download manager, so the test decides what is in memory,
-/// what has failed and when the preview hears about a finished download.
+/// Paging through the screenshots of one application. What a single page shows is tested in
+/// `PreviewPageViewControllerTests`.
+///
+/// A swipe is replayed the way the page controller performs it: it asks the data source for the
+/// neighbor, shows it, and then tells its delegate that the transition has finished.
 @MainActor
 final class PreviewViewControllerTests: XCTestCase {
 
-    private let url = URL(fileURLWithPath: "/screenshots/1.png")
-    private let otherURL = URL(fileURLWithPath: "/screenshots/2.png")
+    private let urls = (0..<4).map { URL(fileURLWithPath: "/screenshots/\($0).png") }
+    private var window: UIWindow?
+
+    override func tearDown() async throws {
+        window?.isHidden = true
+        window = nil
+        try await super.tearDown()
+    }
 
     private func makeSUT(
-        images: [URL: UIImage] = [:],
-        failed: Set<URL> = []
-    ) -> (sut: PreviewViewController, images: ImageProvidingStub) {
-        let stub = ImageProvidingStub()
-        stub.images = images
-        stub.failedURLs = failed
-        let sut = PreviewViewController(url: url, images: stub)
+        urls: [URL]? = nil,
+        startIndex: Int = 2
+    ) throws -> (sut: PreviewViewController, pages: UIPageViewController, images: ImageProvidingStub) {
+        let images = ImageProvidingStub()
+        let sut = PreviewViewController(urls: urls ?? self.urls, startIndex: startIndex, images: images)
         sut.loadViewIfNeeded()
-        return (sut, stub)
+        let pages = try XCTUnwrap(sut.children.first as? UIPageViewController)
+        return (sut, pages, images)
     }
 
-    /// Ends the stream and waits until the preview has handled everything sent before.
-    private func deliverUpdates(from images: ImageProvidingStub, to sut: PreviewViewController) async throws {
-        let observation = try XCTUnwrap(sut.imageUpdatesTask, "The preview is not observing image updates")
-        images.finishUpdates()
-        await waitForEnd(of: observation)
+    private func page(
+        _ direction: UIPageViewController.NavigationDirection,
+        of page: UIViewController?,
+        in pages: UIPageViewController
+    ) -> PreviewPageViewController? {
+        guard let page, let dataSource = pages.dataSource else { return nil }
+        let neighbor = direction == .forward
+            ? dataSource.pageViewController(pages, viewControllerAfter: page)
+            : dataSource.pageViewController(pages, viewControllerBefore: page)
+        return neighbor as? PreviewPageViewController
     }
 
-    private func tapButton(titled title: String, in sut: PreviewViewController) throws {
-        let buttons = sut.view.descendants(ofType: UIButton.self)
-        let button = try XCTUnwrap(buttons.first { $0.configuration?.title == title }, "No “\(title)” button")
-        button.sendActions(for: .touchUpInside)
+    /// Swipes one page in `direction`. `completed: false` is a swipe the user let go of halfway.
+    private func swipe(
+        _ direction: UIPageViewController.NavigationDirection,
+        in pages: UIPageViewController,
+        completed: Bool = true
+    ) throws {
+        let previous = try XCTUnwrap(pages.viewControllers?.first)
+        let next = try XCTUnwrap(page(direction, of: previous, in: pages), "There is no page in that direction")
+        if completed {
+            pages.setViewControllers([next], direction: direction, animated: false)
+        }
+        pages.delegate?.pageViewController?(
+            pages,
+            didFinishAnimating: true,
+            previousViewControllers: [previous],
+            transitionCompleted: completed
+        )
+    }
+
+    private func counter(in sut: PreviewViewController) -> UILabel? {
+        sut.view.descendants(ofType: UILabel.self).first { $0.text?.contains(" / ") == true }
     }
 
     // MARK: - Opening
 
-    func testACachedImageIsShownAtOnce() {
-        let image = UIImage()
-        let (sut, _) = makeSUT(images: [url: image])
+    func testItOpensOnTheTappedScreenshot() throws {
+        let (sut, _, _) = try makeSUT(startIndex: 2)
 
-        XCTAssertTrue(sut.displayedImage === image)
-        XCTAssertFalse(sut.showsLoadingIndicator)
-        XCTAssertFalse(sut.showsFailure)
+        XCTAssertEqual(sut.currentIndex, 2)
+        XCTAssertEqual(sut.currentPage?.url, urls[2])
+        XCTAssertEqual(counter(in: sut)?.text, "3 / 4")
+        XCTAssertEqual(counter(in: sut)?.accessibilityLabel, "Screenshot 3 of 4")
     }
 
-    func testAnImageThatIsNotThereYetIsRequestedWithHighPriorityAndShownAsLoading() {
-        let (sut, images) = makeSUT()
+    func testOnlyTheScreenshotOnScreenIsRequested() throws {
+        let (sut, _, images) = try makeSUT(startIndex: 2)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = sut
+        window.isHidden = false
+        self.window = window
+        window.layoutIfNeeded()
 
-        XCTAssertEqual(images.requests, [.init(url: url, priority: .high)])
-        XCTAssertNil(sut.displayedImage)
-        XCTAssertTrue(sut.showsLoadingIndicator)
-        XCTAssertFalse(sut.showsFailure)
+        // The neighbors are created only when the user swipes towards them.
+        XCTAssertEqual(images.requests, [.init(url: urls[2], priority: .high)])
     }
 
-    func testOpeningThePreviewOfAFailedImageRetriesItAtOnce() {
-        let (sut, _) = makeSUT(failed: [url])
+    // MARK: - Paging
 
-        // Opening the preview is itself a high-priority request, which is a retry.
-        XCTAssertTrue(sut.showsLoadingIndicator)
-        XCTAssertFalse(sut.showsFailure)
+    func testThePagesBeforeAndAfterAreTheNeighborsInTheGallery() throws {
+        let (sut, pages, _) = try makeSUT(startIndex: 2)
+
+        XCTAssertEqual(page(.reverse, of: sut.currentPage, in: pages)?.url, urls[1])
+        XCTAssertEqual(page(.forward, of: sut.currentPage, in: pages)?.url, urls[3])
     }
 
-    // MARK: - Updates
+    func testTheGalleryDoesNotWrapAroundAtEitherEnd() throws {
+        let (first, firstPages, _) = try makeSUT(startIndex: 0)
+        XCTAssertNil(page(.reverse, of: first.currentPage, in: firstPages))
 
-    func testTheImageAppearsWhenItsDownloadEnds() async throws {
-        let (sut, images) = makeSUT()
-        let image = UIImage()
-
-        images.images[url] = image
-        images.send(url)
-        try await deliverUpdates(from: images, to: sut)
-
-        XCTAssertTrue(sut.displayedImage === image)
-        XCTAssertFalse(sut.showsLoadingIndicator)
+        let (last, lastPages, _) = try makeSUT(startIndex: urls.count - 1)
+        XCTAssertNil(page(.forward, of: last.currentPage, in: lastPages))
     }
 
-    func testAFailedDownloadShowsTheFailure() async throws {
-        let (sut, images) = makeSUT()
+    func testSwipingMovesThroughTheGalleryAndUpdatesTheCounter() throws {
+        let (sut, pages, _) = try makeSUT(startIndex: 2)
 
-        images.failedURLs.insert(url)
-        images.send(url)
-        try await deliverUpdates(from: images, to: sut)
+        try swipe(.forward, in: pages)
+        XCTAssertEqual(sut.currentIndex, 3)
+        XCTAssertEqual(sut.currentPage?.url, urls[3])
+        XCTAssertEqual(counter(in: sut)?.text, "4 / 4")
 
-        XCTAssertTrue(sut.showsFailure)
-        XCTAssertFalse(sut.showsLoadingIndicator)
-        XCTAssertNil(sut.displayedImage)
+        try swipe(.reverse, in: pages)
+        try swipe(.reverse, in: pages)
+        XCTAssertEqual(sut.currentIndex, 1)
+        XCTAssertEqual(counter(in: sut)?.text, "2 / 4")
     }
 
-    func testUpdatesOfOtherScreenshotsAreIgnored() async throws {
-        let (sut, images) = makeSUT()
+    func testASwipeLetGoOfHalfwayKeepsTheCurrentScreenshot() throws {
+        let (sut, pages, _) = try makeSUT(startIndex: 2)
 
-        images.images[otherURL] = UIImage()
-        images.send(otherURL)
-        try await deliverUpdates(from: images, to: sut)
+        try swipe(.forward, in: pages, completed: false)
 
-        XCTAssertNil(sut.displayedImage)
-        XCTAssertTrue(sut.showsLoadingIndicator)
+        XCTAssertEqual(sut.currentIndex, 2)
+        XCTAssertEqual(counter(in: sut)?.text, "3 / 4")
     }
 
-    // MARK: - Retry
+    func testASingleScreenshotHasNoNeighborsAndNoCounter() throws {
+        let (sut, pages, _) = try makeSUT(urls: [urls[0]], startIndex: 0)
 
-    func testRetryRequestsTheImageAgainWithHighPriorityAndShowsLoading() async throws {
-        let (sut, images) = makeSUT()
-        images.failedURLs.insert(url)
-        images.send(url)
-        let observation = try XCTUnwrap(sut.imageUpdatesTask)
-        images.finishUpdates()
-        await waitForEnd(of: observation)
-        XCTAssertTrue(sut.showsFailure)
-
-        try tapButton(titled: "Retry", in: sut)
-
-        XCTAssertEqual(images.requests, [.init(url: url, priority: .high), .init(url: url, priority: .high)])
-        XCTAssertFalse(sut.showsFailure)
-        XCTAssertTrue(sut.showsLoadingIndicator)
-    }
-
-    // MARK: - Lifetime
-
-    func testReleasingThePreviewEndsItsSubscription() async {
-        let images = ImageProvidingStub()
-        weak var weakSUT: PreviewViewController?
-
-        autoreleasepool {
-            let sut = PreviewViewController(url: url, images: images)
-            sut.loadViewIfNeeded()
-            weakSUT = sut
-        }
-
-        XCTAssertNil(weakSUT, "The observation task must not keep the preview alive")
-        await fulfillment(of: [images.subscriptionEnded], timeout: 2)
+        XCTAssertNil(page(.reverse, of: sut.currentPage, in: pages))
+        XCTAssertNil(page(.forward, of: sut.currentPage, in: pages))
+        let counter = try XCTUnwrap(counter(in: sut))
+        XCTAssertTrue(counter.superview?.isHidden == true, "“1 / 1” tells the user nothing")
     }
 }

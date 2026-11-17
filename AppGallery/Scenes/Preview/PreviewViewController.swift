@@ -1,71 +1,58 @@
 import SnapKit
 import UIKit
 
-/// Shows one screenshot large, on a dark background.
+/// Shows the screenshots of one application large, on a dark background. It opens on the screenshot
+/// that was tapped; swiping left and right moves through the rest of that application's gallery.
 ///
-/// A plain view controller on purpose: it has no business logic, so an interactor and a presenter
-/// would have nothing to do. It reads its image from the same download manager as the list.
+/// A `UIPageViewController` does the paging: it creates a page only when the user swipes towards it,
+/// keeps each page at full size through rotation and Split View, and supports VoiceOver's
+/// three-finger swipe. Each page shows one screenshot (`PreviewPageViewController`).
 ///
 /// It covers the whole screen, so the search bar cannot be reached while it is up. That is why the
 /// query cannot change, and the downloads cannot be cancelled, underneath an open preview.
 final class PreviewViewController: UIViewController {
 
     private enum Layout {
-        static let closeButtonInset: CGFloat = 8
-        static let contentInset: CGFloat = 24
-        static let failureSpacing: CGFloat = 16
+        static let controlInset: CGFloat = 8
+        static let pageSpacing: CGFloat = 16
+        static let counterFontSize: CGFloat = 15
+        static let counterPadding = NSDirectionalEdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12)
     }
 
-    private let url: URL
+    private let urls: [URL]
     private let images: any ImageProviding
 
-    /// Listens for finished downloads. Readable so that tests can wait for it to end.
-    private(set) var imageUpdatesTask: Task<Void, Never>?
+    /// Which screenshot is on screen. Readable for tests.
+    private(set) var currentIndex: Int
 
-    /// What the screen shows, readable for tests.
-    var displayedImage: UIImage? {
-        imageView.image
+    /// The page on screen.
+    var currentPage: PreviewPageViewController? {
+        pageViewController.viewControllers?.first as? PreviewPageViewController
     }
 
-    var showsLoadingIndicator: Bool {
-        loadingIndicator.isAnimating
-    }
+    private let pageViewController = UIPageViewController(
+        transitionStyle: .scroll,
+        navigationOrientation: .horizontal,
+        options: [.interPageSpacing: Layout.pageSpacing]
+    )
 
-    var showsFailure: Bool {
-        !failureStackView.isHidden
-    }
-
-    private let imageView: UIImageView = {
-        let imageView = UIImageView()
-        imageView.contentMode = .scaleAspectFit
-        return imageView
-    }()
-
-    private let loadingIndicator = UIActivityIndicatorView(style: .large)
-
-    private let failureStackView: UIStackView = {
-        let stackView = UIStackView()
-        stackView.axis = .vertical
-        stackView.alignment = .center
-        stackView.spacing = Layout.failureSpacing
-        return stackView
-    }()
-
-    private let failureLabel: UILabel = {
+    /// "3 / 8": where the user is in the gallery. Hidden when there is only one screenshot.
+    private let counterLabel: UILabel = {
         let label = UILabel()
-        label.text = "This screenshot could not be loaded."
-        label.font = .preferredFont(forTextStyle: .body)
+        // Digits of equal width, so the capsule does not change size from "1 / 8" to "2 / 8".
+        let font = UIFont.monospacedDigitSystemFont(ofSize: Layout.counterFontSize, weight: .semibold)
+        label.font = UIFontMetrics(forTextStyle: .subheadline).scaledFont(for: font)
         label.adjustsFontForContentSizeCategory = true
-        label.textColor = .secondaryLabel
-        label.textAlignment = .center
-        label.numberOfLines = 0
+        label.textColor = .label
         return label
     }()
 
-    private let retryButton: UIButton = {
-        var configuration = UIButton.Configuration.filled()
-        configuration.title = "Retry"
-        return UIButton(configuration: configuration)
+    /// A dimmed capsule behind the counter, so that it stays readable on top of a bright screenshot.
+    private let counterBackground: UIView = {
+        let view = UIView()
+        view.backgroundColor = .secondarySystemBackground.withAlphaComponent(0.8)
+        view.layer.cornerCurve = .continuous
+        return view
     }()
 
     private let closeButton: UIButton = {
@@ -77,8 +64,11 @@ final class PreviewViewController: UIViewController {
         return button
     }()
 
-    init(url: URL, images: any ImageProviding) {
-        self.url = url
+    /// `startIndex` must be a position in `urls`; the interactor only records selections that are.
+    init(urls: [URL], startIndex: Int, images: any ImageProviding) {
+        precondition(urls.indices.contains(startIndex), "The preview needs a screenshot to start on")
+        self.urls = urls
+        self.currentIndex = startIndex
         self.images = images
         super.init(nibName: nil, bundle: nil)
     }
@@ -89,92 +79,112 @@ final class PreviewViewController: UIViewController {
         return nil
     }
 
-    deinit {
-        imageUpdatesTask?.cancel()
-    }
-
     // MARK: - Lifecycle
 
     override func viewDidLoad() {
         super.viewDidLoad()
         setupViews()
         setupConstraints()
-        configureActions()
-        observeImageUpdates()
+        closeButton.addAction(UIAction { [weak self] _ in self?.dismiss(animated: true) }, for: .touchUpInside)
 
-        // The user is waiting for this one image, so it goes to the front of the queue.
-        // If it is cached or already downloading, this does nothing.
-        images.request(url, priority: .high)
-        showCurrentState()
+        pageViewController.dataSource = self
+        pageViewController.delegate = self
+        if let page = makePage(at: currentIndex) {
+            pageViewController.setViewControllers([page], direction: .forward, animated: false)
+        }
+        updateCounter()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        counterBackground.layer.cornerRadius = counterBackground.bounds.height / 2
     }
 
     // MARK: - Setup
 
     private func setupViews() {
-        // The preview is dark in both appearances. The semantic colors follow this, and so does the
+        // Dark in both appearances. The pages and the controls follow this, and so does the
         // status bar, which shows light text while the preview is up.
         overrideUserInterfaceStyle = .dark
         view.backgroundColor = .black
-        view.addSubview(imageView)
-        view.addSubview(loadingIndicator)
-        view.addSubview(failureStackView)
-        failureStackView.addArrangedSubview(failureLabel)
-        failureStackView.addArrangedSubview(retryButton)
+
+        // Standard containment: the page controller is a child, so it gets the appearance callbacks
+        // and passes them on to its pages.
+        addChild(pageViewController)
+        view.addSubview(pageViewController.view)
+        pageViewController.didMove(toParent: self)
+
+        view.addSubview(counterBackground)
+        counterBackground.addSubview(counterLabel)
         view.addSubview(closeButton)
     }
 
     private func setupConstraints() {
-        imageView.snp.makeConstraints { make in
-            make.edges.equalTo(view.safeAreaLayoutGuide)
-        }
-        loadingIndicator.snp.makeConstraints { make in
-            make.center.equalToSuperview()
-        }
-        failureStackView.snp.makeConstraints { make in
-            make.center.equalToSuperview()
-            make.leading.greaterThanOrEqualToSuperview().inset(Layout.contentInset)
-            make.trailing.lessThanOrEqualToSuperview().inset(Layout.contentInset)
+        pageViewController.view.snp.makeConstraints { make in
+            make.edges.equalToSuperview()
         }
         closeButton.snp.makeConstraints { make in
-            make.top.trailing.equalTo(view.safeAreaLayoutGuide).inset(Layout.closeButtonInset)
+            make.top.trailing.equalTo(view.safeAreaLayoutGuide).inset(Layout.controlInset)
+        }
+        counterBackground.snp.makeConstraints { make in
+            make.centerX.equalToSuperview()
+            make.centerY.equalTo(closeButton)
+        }
+        counterLabel.snp.makeConstraints { make in
+            make.edges.equalToSuperview().inset(Layout.counterPadding)
         }
     }
 
-    private func configureActions() {
-        closeButton.addAction(UIAction { [weak self] _ in self?.dismiss(animated: true) }, for: .touchUpInside)
-        retryButton.addAction(UIAction { [weak self] _ in self?.retry() }, for: .touchUpInside)
+    // MARK: - Pages
+
+    private func makePage(at index: Int) -> PreviewPageViewController? {
+        guard urls.indices.contains(index) else { return nil }
+        return PreviewPageViewController(url: urls[index], index: index, images: images)
     }
 
-    // MARK: - Image
+    private func updateCounter() {
+        counterBackground.isHidden = urls.count < 2
+        counterLabel.text = "\(currentIndex + 1) / \(urls.count)"
+        counterLabel.accessibilityLabel = "Screenshot \(currentIndex + 1) of \(urls.count)"
+    }
+}
 
-    /// `self` is only referred to weakly inside the loop, so this task never keeps the preview alive.
-    private func observeImageUpdates() {
-        let updates = images.updates()
-        imageUpdatesTask = Task { [weak self, url] in
-            for await updatedURL in updates where updatedURL == url {
-                self?.showCurrentState()
-            }
-        }
+// MARK: - UIPageViewControllerDataSource
+
+extension PreviewViewController: UIPageViewControllerDataSource {
+
+    /// `nil` at either end, so the first and the last screenshot do not wrap around.
+    func pageViewController(
+        _ pageViewController: UIPageViewController,
+        viewControllerBefore viewController: UIViewController
+    ) -> UIViewController? {
+        guard let page = viewController as? PreviewPageViewController else { return nil }
+        return makePage(at: page.index - 1)
     }
 
-    private func retry() {
-        images.request(url, priority: .high)
-        showCurrentState()
+    func pageViewController(
+        _ pageViewController: UIPageViewController,
+        viewControllerAfter viewController: UIViewController
+    ) -> UIViewController? {
+        guard let page = viewController as? PreviewPageViewController else { return nil }
+        return makePage(at: page.index + 1)
     }
+}
 
-    private func showCurrentState() {
-        if let image = images.image(for: url) {
-            imageView.image = image
-            loadingIndicator.stopAnimating()
-            failureStackView.isHidden = true
-        } else if images.hasFailed(url) {
-            imageView.image = nil
-            loadingIndicator.stopAnimating()
-            failureStackView.isHidden = false
-        } else {
-            imageView.image = nil
-            loadingIndicator.startAnimating()
-            failureStackView.isHidden = true
-        }
+// MARK: - UIPageViewControllerDelegate
+
+extension PreviewViewController: UIPageViewControllerDelegate {
+
+    /// Called after a swipe. A swipe the user let go of halfway comes back with `completed == false`
+    /// and leaves the counter as it was.
+    func pageViewController(
+        _ pageViewController: UIPageViewController,
+        didFinishAnimating finished: Bool,
+        previousViewControllers: [UIViewController],
+        transitionCompleted completed: Bool
+    ) {
+        guard completed, let page = currentPage else { return }
+        currentIndex = page.index
+        updateCounter()
     }
 }

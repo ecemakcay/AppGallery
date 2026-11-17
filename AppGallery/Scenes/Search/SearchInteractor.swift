@@ -11,8 +11,9 @@ protocol SearchBusinessLogic: AnyObject {
 protocol SearchDataStore: AnyObject {
     /// The applications currently on screen, in API order.
     var apps: [AppResult] { get }
-    /// The screenshot the user tapped last, for the router to hand to the preview.
-    var selectedScreenshotURL: URL? { get }
+    /// The screenshot the user tapped last, with the rest of its application's gallery,
+    /// for the router to hand to the preview.
+    var selectedScreenshot: Search.SelectScreenshot.Selection? { get }
 }
 
 /// Decides when to search and which response is still relevant.
@@ -33,7 +34,7 @@ final class SearchInteractor: SearchBusinessLogic, SearchDataStore {
     private let sleep: (Duration) async throws -> Void
 
     private(set) var apps: [AppResult] = []
-    private(set) var selectedScreenshotURL: URL?
+    private(set) var selectedScreenshot: Search.SelectScreenshot.Selection?
 
     /// The trimmed query that is displayed or being searched for. `nil` until the first request.
     private var currentQuery: String?
@@ -76,12 +77,15 @@ final class SearchInteractor: SearchBusinessLogic, SearchDataStore {
     func selectScreenshot(request: Search.SelectScreenshot.Request) {
         // The indexes come from the screen. They are checked instead of trusted, so a tap that
         // races with a change of results selects nothing rather than crashing.
-        guard apps.indices.contains(request.appIndex) else {
-            selectedScreenshotURL = nil
+        guard apps.indices.contains(request.appIndex),
+              apps[request.appIndex].screenshotURLs.indices.contains(request.screenshotIndex) else {
+            selectedScreenshot = nil
             return
         }
-        let urls = apps[request.appIndex].screenshotURLs
-        selectedScreenshotURL = urls.indices.contains(request.screenshotIndex) ? urls[request.screenshotIndex] : nil
+        selectedScreenshot = Search.SelectScreenshot.Selection(
+            screenshotURLs: apps[request.appIndex].screenshotURLs,
+            index: request.screenshotIndex
+        )
     }
 
     // MARK: - Search
@@ -92,7 +96,7 @@ final class SearchInteractor: SearchBusinessLogic, SearchDataStore {
         searchTask?.cancel()
         searchTask = nil
         apps = []
-        selectedScreenshotURL = nil
+        selectedScreenshot = nil
         // The screenshots of the previous results are no longer wanted.
         imageDownloader.cancelAll()
 

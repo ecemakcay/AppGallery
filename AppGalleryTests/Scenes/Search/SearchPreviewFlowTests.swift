@@ -173,16 +173,20 @@ final class SearchPreviewFlowTests: XCTestCase {
             self.topmost(of: scene.navigationController) is PreviewViewController
         }
         let preview = try XCTUnwrap(topmost(of: scene.navigationController) as? PreviewViewController)
+        let page = try XCTUnwrap(preview.currentPage)
+        XCTAssertEqual(page.url, tappedURL)
+        XCTAssertEqual(preview.currentIndex, 4)
 
         // The tapped screenshot was waiting in the queue; the preview moved it to the front,
         // so it is the next one to start when a slot frees up.
-        XCTAssertTrue(preview.showsLoadingIndicator)
+        await waitUntil("the page is on screen") { page.view.window != nil }
+        XCTAssertTrue(page.showsLoadingIndicator)
         scene.fetcher.finish(call: 0, with: .success(UIImage()))
         await fulfillment(of: [scene.fetcher.expectStarts(4)], timeout: 2)
         XCTAssertEqual(scene.fetcher.startedURLs[3], tappedURL)
 
         scene.fetcher.finish(call: 3, with: .success(image))
-        await waitUntil("the preview shows its image") { preview.displayedImage === image }
-        XCTAssertFalse(preview.showsLoadingIndicator)
+        await waitUntil("the preview shows its image") { page.displayedImage === image }
+        XCTAssertFalse(page.showsLoadingIndicator)
     }
 }

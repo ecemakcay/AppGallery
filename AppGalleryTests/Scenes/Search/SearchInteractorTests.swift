@@ -306,17 +306,18 @@ final class SearchInteractorTests: XCTestCase {
 
     // MARK: - Selecting a screenshot
 
-    func testSelectingAScreenshotStoresItsURLForTheRouter() async {
+    func testSelectingAScreenshotStoresItsWholeGalleryAndPositionForTheRouter() async {
         let (sut, presenter, worker, _) = makeSUT()
         sut.fetchApps(request: .init(query: "spotify"))
         await wait(for: worker.expectCalls(1))
         worker.complete(call: 0, with: .success(spotify))
         await wait(for: presenter.expectResponses(2))
-        XCTAssertNil(sut.selectedScreenshotURL)
+        XCTAssertNil(sut.selectedScreenshot)
 
-        sut.selectScreenshot(request: .init(appIndex: 1, screenshotIndex: 0))
+        sut.selectScreenshot(request: .init(appIndex: 1, screenshotIndex: 1))
 
-        XCTAssertEqual(sut.selectedScreenshotURL, spotify[1].screenshotURLs[0])
+        // The whole gallery, so the preview can page through it, opened on the tapped screenshot.
+        XCTAssertEqual(sut.selectedScreenshot, .init(screenshotURLs: spotify[1].screenshotURLs, index: 1))
     }
 
     func testSelectingAPositionThatDoesNotExistSelectsNothing() async {
@@ -328,10 +329,10 @@ final class SearchInteractorTests: XCTestCase {
         sut.selectScreenshot(request: .init(appIndex: 0, screenshotIndex: 0))
 
         sut.selectScreenshot(request: .init(appIndex: 7, screenshotIndex: 0))
-        XCTAssertNil(sut.selectedScreenshotURL)
+        XCTAssertNil(sut.selectedScreenshot)
 
         sut.selectScreenshot(request: .init(appIndex: 0, screenshotIndex: 99))
-        XCTAssertNil(sut.selectedScreenshotURL)
+        XCTAssertNil(sut.selectedScreenshot)
     }
 
     func testAChangedQueryForgetsTheSelection() async {
@@ -344,7 +345,7 @@ final class SearchInteractorTests: XCTestCase {
 
         sut.fetchApps(request: .init(query: ""))
 
-        XCTAssertNil(sut.selectedScreenshotURL)
+        XCTAssertNil(sut.selectedScreenshot)
     }
 
     // MARK: - Lifetime

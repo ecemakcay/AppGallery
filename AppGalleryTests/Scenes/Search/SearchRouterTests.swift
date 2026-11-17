@@ -14,7 +14,9 @@ final class SearchRouterTests: XCTestCase {
         try await super.tearDown()
     }
 
-    private func makeSUT(selected url: URL?) -> (sut: SearchRouter, source: UIViewController, images: ImageProvidingStub) {
+    private func makeSUT(
+        selected selection: Search.SelectScreenshot.Selection?
+    ) -> (sut: SearchRouter, source: UIViewController, images: ImageProvidingStub) {
         let source = UIViewController()
         let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
         let window = scene.map(UIWindow.init(windowScene:)) ?? UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
@@ -23,7 +25,7 @@ final class SearchRouterTests: XCTestCase {
         self.window = window
 
         let dataStore = SearchDataStoreStub()
-        dataStore.selectedScreenshotURL = url
+        dataStore.selectedScreenshot = selection
         let images = ImageProvidingStub()
         let sut = SearchRouter(images: images)
         sut.viewController = source
@@ -31,17 +33,21 @@ final class SearchRouterTests: XCTestCase {
         return (sut, source, images)
     }
 
-    func testRouteToPreviewPresentsTheSelectedScreenshotFullScreen() throws {
-        let url = URL(fileURLWithPath: "/screenshots/1.png")
-        let (sut, source, images) = makeSUT(selected: url)
+    func testRouteToPreviewPresentsTheSelectedScreenshotFullScreenInItsGallery() throws {
+        let urls = (0..<3).map { URL(fileURLWithPath: "/screenshots/\($0).png") }
+        let (sut, source, images) = makeSUT(selected: .init(screenshotURLs: urls, index: 1))
 
         sut.routeToPreview()
 
         let preview = try XCTUnwrap(source.presentedViewController as? PreviewViewController)
         XCTAssertEqual(preview.modalPresentationStyle, .fullScreen)
+        XCTAssertEqual(preview.currentIndex, 1)
+        XCTAssertEqual(preview.currentPage?.url, urls[1])
         // The preview uses the same image source as the list: its request arrives at the router's stub.
-        preview.loadViewIfNeeded()
-        XCTAssertEqual(images.requests, [.init(url: url, priority: .high)])
+        let page = try XCTUnwrap(preview.currentPage)
+        page.beginAppearanceTransition(true, animated: false)
+        page.endAppearanceTransition()
+        XCTAssertTrue(images.requests.contains(.init(url: urls[1], priority: .high)))
     }
 
     func testRouteToPreviewDoesNothingWhenNoScreenshotIsSelected() {

@@ -153,7 +153,7 @@ final class SearchRouterSpy: SearchRoutingLogic {
 final class SearchDataStoreStub: SearchDataStore {
 
     var apps: [AppResult] = []
-    var selectedScreenshotURL: URL?
+    var selectedScreenshot: Search.SelectScreenshot.Selection?
 }
 
 @MainActor
