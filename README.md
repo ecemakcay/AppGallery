@@ -5,7 +5,7 @@
 <a id="turkce"></a>
 ## Türkçe
 
-AppGallery, iTunes Search API üzerinden uygulama arayıp ekran görüntülerini yatay galerilerde gösteren bir iOS projesi. Bir görsele dokununca tam ekran önizlemesi açılıyor. Bu case çalışmasında arama değişikliklerini doğru yönetmeye, aynı anda en fazla üç görsel indirmeye ve bu davranışları test edebilmeye odaklandım.
+AppGallery, iTunes Search API üzerinden uygulama arayıp ekran görüntülerini yatay galerilerde gösteren bir iOS projesi. Bir görsele dokununca tam ekran önizlemesi açılıyor; önizlemede aynı uygulamanın diğer görsellerine yana kaydırarak geçilebiliyor. Bu case çalışmasında arama değişikliklerini doğru yönetmeye, aynı anda en fazla üç görsel indirmeye ve bu davranışları test edebilmeye odaklandım.
 
 ### Ekran görüntüleri
 
@@ -48,7 +48,7 @@ Görev bütün `screenshotUrls` görsellerinin indirilmesini istediği için son
 
 Üçlü sınırı, `pending` kuyruğu ve dolu slotları tutan `occupiedSlots` sayacıyla yönettim. Boş slot varsa sıradaki URL başlatılıyor; kapasite kontrolü ile slot ayırma arasında `await` yok. Bir indirme başarı, hata veya iptalle döndüğünde slotunu bırakıyor ve `startNextDownloads()` sıradaki işleri başlatıyor. `DispatchSemaphore` da uygun bir tasarımda kullanılabilir; ancak `wait()` çağrısı thread'i bloke edebilir. Burada boş slot için thread bekletmeden iş başlatan yaklaşım, async/await akışına daha uygun geldi.
 
-İptal edilen işin slotunu hemen boşaltmıyorum; iş gerçekten döndüğünde bırakıyorum. Böylece eski istekler kapanırken yenilerinin başlayıp üçlü sınırı aşmasını önlüyorum. Kuyrukta bekleyen bir görsel önizlemede açılırsa öne alınıyor; önbellekteyse veya zaten indiriliyorsa yeni iş başlamıyor. Başarısız indirmeler kullanıcı isteğiyle tekrar deneniyor.
+İptal edilen işin slotunu hemen boşaltmıyorum; iş gerçekten döndüğünde bırakıyorum. Böylece eski istekler kapanırken yenilerinin başlayıp üçlü sınırı aşmasını önlüyorum. Önizlemede ekrana gelen görsel kuyrukta bekliyorsa öne alınıyor; önbellekteyse veya zaten indiriliyorsa yeni iş başlamıyor. Başarısız indirmeler kullanıcı isteğiyle, listede kutucuğa ya da önizlemede Retry'a dokununca tekrar deneniyor.
 
 Manager'ı ayrı bir `actor` yerine `@MainActor` sınıf olarak tuttum. Kuyruk ve önbellek durumu tek aktörde korunurken hücreler önbelleği senkron okuyabiliyor. Ağ ve görsel hazırlama işi fetcher içindeki `@concurrent` fonksiyonda ana aktörün dışında çalışıyor.
 
@@ -64,15 +64,15 @@ Arama ekranında Clean Swift'in VIP ayrımını kullandım:
 - **Interactor:** Arama zamanlamasını, iptali, güncel sonucu ve görsellerin kuyruğa alınmasını yönetir.
 - **Presenter:** Sonuçları ekran metinlerine ve section modellerine dönüştürür.
 
-`SearchWorker`, `APIClient` üzerinden aramayı yapar; `SearchRouter` seçilen görselle önizlemeyi açar. Bağımlılıkları `SceneDelegate` içinde oluşturup `SearchConfigurator` ile bağlıyorum. Dışarıdan verilen bağımlılıklar sayesinde testlerde ağı değiştirebiliyorum.
+`SearchWorker`, `APIClient` üzerinden aramayı yapar; `SearchRouter` seçilen görseli, uygulamanın diğer görselleriyle birlikte önizlemede açar. Bağımlılıkları `SceneDelegate` içinde oluşturup `SearchConfigurator` ile bağlıyorum. Dışarıdan verilen bağımlılıklar sayesinde testlerde ağı değiştirebiliyorum.
 
-Önizleme tek görselin yüklenme, hata ve tekrar deneme durumlarını gösterdiği için ayrıca VIP katmanları eklemedim. Tam ekran sunulduğundan alttaki arama alanına erişilemiyor. Görsel güncellemelerini de hücrenin o anda temsil ettiği URL ile eşleştiriyorum; eski index path'leri kullanmıyorum.
+Önizleme yalnızca görselleri yüklenme, hata ve tekrar deneme durumlarıyla gösterip aralarında kaydırdığı için ayrıca VIP katmanları eklemedim. Kaydırmayı `UIPageViewController` yapıyor; her sayfa görselini ekrana gelirken istiyor. Tam ekran sunulduğundan alttaki arama alanına erişilemiyor. Görsel güncellemelerini de hücrenin o anda temsil ettiği URL ile eşleştiriyorum; eski index path'leri kullanmıyorum. UIKit'in ekran dışında sakladığı hücreler güncellemeyi kaçırabildiği için hücreleri `willDisplay` içinde yeniden ayarlıyorum.
 
 ### Testler
 
-Testler gerçek ağı kullanmıyor. Kontrollü test nesneleri isteklerin tamamlanma sırasını belirliyor; debounce testlerinde bekleme fonksiyonu dışarıdan veriliyor. Eski yanıtların elenmesi, iptal, üç indirme sınırı, öncelik, tekrar deneme, hücrelerin yeniden kullanımı, önizleme ve farklı genişlik/yazı boyutları kontrol ediliyor.
+Testler gerçek ağı kullanmıyor. Kontrollü test nesneleri isteklerin tamamlanma sırasını belirliyor; debounce testlerinde bekleme fonksiyonu dışarıdan veriliyor. Eski yanıtların elenmesi, iptal, üç indirme sınırı, öncelik, tekrar deneme, hücrelerin yeniden kullanımı, önizleme, sayfa geçişleri ve farklı genişlik/yazı boyutları kontrol ediliyor.
 
-16 Kasım 2026'da iOS 26.4 / iPhone 17 ve iOS 17.2 / iPhone 15 simülatörlerinde 119 testin tamamı geçti.
+17 Kasım 2026'da iOS 26.4 / iPhone 17 ve iOS 17.2 / iPhone 15 simülatörlerinde 128 testin tamamı geçti.
 
 Proje Swift 5 dil modunda, `SWIFT_STRICT_CONCURRENCY = complete`, `SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated` ve `SWIFT_APPROACHABLE_CONCURRENCY = YES` ayarlarıyla derleniyor. Aktör izolasyonunu kodda açıkça belirtiyorum.
 
@@ -83,7 +83,7 @@ Proje Swift 5 dil modunda, `SWIFT_STRICT_CONCURRENCY = complete`, `SWIFT_DEFAULT
 <a id="english"></a>
 ## English
 
-AppGallery is an iOS project that searches for apps through the iTunes Search API and displays their screenshots in horizontal galleries. Tapping an image opens a full-screen preview. For this case study, I focused on handling query changes correctly, downloading at most three images at once, and testing those behaviours.
+AppGallery is an iOS project that searches for apps through the iTunes Search API and displays their screenshots in horizontal galleries. Tapping an image opens a full-screen preview, where you can swipe sideways through the app's other screenshots. For this case study, I focused on handling query changes correctly, downloading at most three images at once, and testing those behaviours.
 
 ### Screenshots
 
@@ -126,7 +126,7 @@ The assignment asks for every image in `screenshotUrls`, so I queue them all whe
 
 I manage the limit with a `pending` queue and an `occupiedSlots` counter. When a slot is available, the next URL starts; there is no `await` between checking capacity and reserving the slot. When a download returns with success, failure or cancellation, it releases its slot and `startNextDownloads()` starts the next waiting jobs. `DispatchSemaphore` can also work in an appropriate design, but `wait()` can block a thread. Scheduling work without blocking a thread while waiting for capacity fitted this async/await flow better.
 
-A cancelled download keeps its slot until it actually returns. This prevents new requests from exceeding the limit while old ones are still winding down. Opening a queued image in the preview moves it to the front; cached or already-running images do not start another job. Failed downloads are retried on user request.
+A cancelled download keeps its slot until it actually returns. This prevents new requests from exceeding the limit while old ones are still winding down. When a queued image appears in the preview, it moves to the front; cached or already-running images do not start another job. Failed downloads are retried on user request, by tapping the tile in the list or Retry in the preview.
 
 I kept the manager as a `@MainActor` class instead of a separate actor. Queue and cache state stay isolated on one actor, while cells can read cached images synchronously. Networking and image preparation run outside the main actor in the fetcher's `@concurrent` function.
 
@@ -142,15 +142,15 @@ The search screen follows Clean Swift's VIP separation:
 - **Interactor:** Handles search timing, cancellation, response freshness and image queueing.
 - **Presenter:** Maps results into display text and section models.
 
-`SearchWorker` searches through `APIClient`; `SearchRouter` opens the selected image in the preview. I create dependencies in `SceneDelegate` and wire them in `SearchConfigurator`. Passing dependencies in lets tests replace the network.
+`SearchWorker` searches through `APIClient`; `SearchRouter` opens the selected image in the preview, together with the app's other screenshots. I create dependencies in `SceneDelegate` and wire them in `SearchConfigurator`. Passing dependencies in lets tests replace the network.
 
-I did not add VIP layers to the preview because it only shows one image with loading, error and retry states. Its full-screen presentation keeps the search field underneath out of reach. Image updates are matched against the URL a cell currently represents, rather than an old index path.
+I did not add VIP layers to the preview because it only shows images with loading, error and retry states and pages between them. `UIPageViewController` handles the paging, and each page requests its image when it is about to appear. Its full-screen presentation keeps the search field underneath out of reach. Image updates are matched against the URL a cell currently represents, rather than an old index path. Because UIKit can keep cells off screen and miss an update meanwhile, cells are configured again in `willDisplay`.
 
 ### Tests
 
-Tests do not use the live network. Controlled test doubles determine request completion order, and debounce tests use an injected waiting function. Coverage includes stale responses, cancellation, the three-download limit, priority, retries, cell reuse, the preview flow, and different widths and text sizes.
+Tests do not use the live network. Controlled test doubles determine request completion order, and debounce tests use an injected waiting function. Coverage includes stale responses, cancellation, the three-download limit, priority, retries, cell reuse, the preview flow, paging, and different widths and text sizes.
 
-On 16 November 2026, all 119 tests passed on the iOS 26.4 / iPhone 17 and iOS 17.2 / iPhone 15 simulators.
+On 17 November 2026, all 128 tests passed on the iOS 26.4 / iPhone 17 and iOS 17.2 / iPhone 15 simulators.
 
 The project builds in Swift 5 language mode with `SWIFT_STRICT_CONCURRENCY = complete`, `SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated` and `SWIFT_APPROACHABLE_CONCURRENCY = YES`. Actor isolation is explicit in the code.
 
